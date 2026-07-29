@@ -60,6 +60,7 @@ export function GameApp() {
   const [lastResult, setLastResult] = useState<MatchResult>();
   const [selectedPlayerId, setSelectedPlayerId] = useState<string>();
   const [memo, setMemo] = useState("");
+  const [playbackSpeed, setPlaybackSpeed] = useState<1 | 2>(1);
   const handledFinishedMatch = useRef<string>();
 
   useEffect(() => {
@@ -102,11 +103,11 @@ export function GameApp() {
 
     const timer = window.setInterval(() => {
       setMatch((current) =>
-        current ? advanceMatch(current, 0.5) : current,
+        current ? advanceMatch(current, 0.5 * playbackSpeed) : current,
       );
     }, 500);
     return () => window.clearInterval(timer);
-  }, [matchPhase, screen]);
+  }, [matchPhase, playbackSpeed, screen]);
 
   useEffect(() => {
     if (
@@ -262,8 +263,10 @@ export function GameApp() {
         match={match}
         selectedPlayerId={selectedPlayerId}
         memo={memo}
+        playbackSpeed={playbackSpeed}
         onSelectPlayer={setSelectedPlayerId}
         onMemoChange={setMemo}
+        onPlaybackSpeedChange={setPlaybackSpeed}
       />
     );
   }

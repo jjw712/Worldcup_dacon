@@ -1046,8 +1046,41 @@ p {
 }
 
 .observation-lock {
-  justify-self: end;
   text-align: right;
+}
+
+.match-header-actions {
+  align-items: center;
+  display: flex;
+  gap: 14px;
+  justify-self: end;
+}
+
+.speed-control {
+  background: rgba(243, 240, 232, 0.08);
+  border: 1px solid rgba(243, 240, 232, 0.16);
+  border-radius: 4px;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  padding: 3px;
+}
+
+.speed-control button {
+  border-radius: 2px;
+  color: rgba(243, 240, 232, 0.55);
+  font-size: 9px;
+  font-weight: 900;
+  min-width: 34px;
+  padding: 6px 8px;
+}
+
+.speed-control button:hover {
+  color: var(--cream);
+}
+
+.speed-control button.is-active {
+  background: var(--lime);
+  color: var(--ink);
 }
 
 .observation-lock span {
@@ -2481,6 +2514,8 @@ p {
 
   .match-header {
     grid-template-columns: 1fr auto;
+    gap: 8px;
+    padding: 0 10px;
   }
 
   .match-header .brand-lockup,
@@ -2489,8 +2524,23 @@ p {
   }
 
   .scoreboard {
-    grid-column: 1 / -1;
-    justify-content: center;
+    gap: 6px;
+    grid-column: 1;
+    grid-template-columns: 34px 24px 62px 24px 34px;
+    justify-content: start;
+  }
+
+  .scoreboard > strong {
+    font-size: 22px;
+  }
+
+  .match-header-actions {
+    grid-column: 2;
+  }
+
+  .speed-control button {
+    min-width: 30px;
+    padding: 6px;
   }
 
   .break-header {

@@ -22,16 +22,20 @@ interface ObservationScreenProps {
   match: MatchState;
   selectedPlayerId?: string;
   memo: string;
+  playbackSpeed: 1 | 2;
   onSelectPlayer: (playerId: string) => void;
   onMemoChange: (memo: string) => void;
+  onPlaybackSpeedChange: (speed: 1 | 2) => void;
 }
 
 export function ObservationScreen({
   match,
   selectedPlayerId,
   memo,
+  playbackSpeed,
   onSelectPlayer,
   onMemoChange,
+  onPlaybackSpeedChange,
 }: ObservationScreenProps) {
   const selectedPlayer = match.players.find(
     (player) => player.id === selectedPlayerId,
@@ -67,9 +71,29 @@ export function ObservationScreen({
           <strong>{match.score.away}</strong>
           <span>{match.awayTeam.shortName}</span>
         </div>
-        <div className="observation-lock">
-          <span>관찰 구간</span>
-          <strong>전술 변경 잠금</strong>
+        <div className="match-header-actions">
+          <div className="speed-control" aria-label="경기 진행 속도">
+            <button
+              type="button"
+              className={playbackSpeed === 1 ? "is-active" : ""}
+              aria-pressed={playbackSpeed === 1}
+              onClick={() => onPlaybackSpeedChange(1)}
+            >
+              1×
+            </button>
+            <button
+              type="button"
+              className={playbackSpeed === 2 ? "is-active" : ""}
+              aria-pressed={playbackSpeed === 2}
+              onClick={() => onPlaybackSpeedChange(2)}
+            >
+              2×
+            </button>
+          </div>
+          <div className="observation-lock">
+            <span>관찰 구간</span>
+            <strong>전술 변경 잠금</strong>
+          </div>
         </div>
       </header>
 
