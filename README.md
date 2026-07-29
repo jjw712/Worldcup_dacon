@@ -27,6 +27,16 @@ npm run dev
 
 기본 개발 주소는 `http://localhost:3000`입니다.
 
+## Cloudflare 공개 배포
+
+최초 한 번 `npx wrangler login`으로 Cloudflare 계정을 연결한 뒤 실행합니다.
+
+```bash
+npm run deploy:cloudflare
+```
+
+배포가 끝나면 출력되는 `workers.dev` 주소를 제출 URL로 사용합니다.
+
 ## 검증
 
 ```bash
