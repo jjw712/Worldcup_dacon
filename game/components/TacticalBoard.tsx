@@ -19,6 +19,8 @@ interface TacticalBoardProps {
 interface DisplayPoint {
   x: number;
   y: number;
+  vx?: number;
+  vy?: number;
 }
 
 export function TacticalBoard({
@@ -31,6 +33,10 @@ export function TacticalBoard({
 }: TacticalBoardProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const displayPoints = useRef<Record<string, DisplayPoint>>({});
+  const displayBall = useRef<DisplayPoint>({
+    x: match.ball.x,
+    y: match.ball.y,
+  });
   const draggingPlayerId = useRef<string | null>(null);
   const latestMatch = useRef(match);
   const latestSelected = useRef(selectedPlayerId);
@@ -156,14 +162,34 @@ export function TacticalBoard({
           x: player.x,
           y: player.y,
         };
-        existing.x += (player.x - existing.x) * 0.12;
-        existing.y += (player.y - existing.y) * 0.12;
+        const previousX = existing.x;
+        const previousY = existing.y;
+        existing.x += (player.x - existing.x) * 0.09;
+        existing.y += (player.y - existing.y) * 0.09;
+        existing.vx = existing.x - previousX;
+        existing.vy = existing.y - previousY;
         displayPoints.current[player.id] = existing;
 
         const x = fieldX + existing.x * fieldW;
         const y = fieldY + existing.y * fieldH;
         const radius = compact ? 7 : Math.max(8, Math.min(12, fieldW / 55));
         const selected = latestSelected.current === player.id;
+        const speed = Math.hypot(existing.vx ?? 0, existing.vy ?? 0);
+
+        if (speed > 0.00025) {
+          context.beginPath();
+          context.moveTo(
+            x - (existing.vx ?? 0) * fieldW * 8,
+            y - (existing.vy ?? 0) * fieldH * 8,
+          );
+          context.lineTo(x, y);
+          context.strokeStyle =
+            player.side === "home"
+              ? "rgba(243, 240, 232, 0.28)"
+              : "rgba(201, 244, 89, 0.22)";
+          context.lineWidth = compact ? 1.2 : 2;
+          context.stroke();
+        }
 
         if (selected) {
           context.beginPath();
@@ -200,8 +226,28 @@ export function TacticalBoard({
         }
       }
 
-      const ballX = fieldX + current.ball.x * fieldW;
-      const ballY = fieldY + current.ball.y * fieldH;
+      displayBall.current.x +=
+        (current.ball.x - displayBall.current.x) * 0.075;
+      displayBall.current.y +=
+        (current.ball.y - displayBall.current.y) * 0.075;
+      const ballX = fieldX + displayBall.current.x * fieldW;
+      const ballY = fieldY + displayBall.current.y * fieldH;
+      const ownerPoint = current.ball.ownerPlayerId
+        ? displayPoints.current[current.ball.ownerPlayerId]
+        : undefined;
+      if (ownerPoint) {
+        context.beginPath();
+        context.moveTo(
+          fieldX + ownerPoint.x * fieldW,
+          fieldY + ownerPoint.y * fieldH,
+        );
+        context.lineTo(ballX, ballY);
+        context.strokeStyle = "rgba(255, 255, 255, 0.24)";
+        context.lineWidth = 1;
+        context.setLineDash([4, 5]);
+        context.stroke();
+        context.setLineDash([]);
+      }
       context.beginPath();
       context.arc(ballX, ballY, compact ? 3.5 : 5, 0, Math.PI * 2);
       context.fillStyle = "#ffffff";

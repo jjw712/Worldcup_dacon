@@ -115,6 +115,7 @@ export interface BallState {
   x: number;
   y: number;
   ownerSide: Side;
+  ownerPlayerId?: string;
   zone: number;
 }
 

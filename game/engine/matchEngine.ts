@@ -117,7 +117,13 @@ export function createMatch(
     gameMinute: 0,
     score: { home: 0, away: 0 },
     players: [...homePlayers, ...awayPlayers],
-    ball: { x: 0.5, y: 0.5, ownerSide: "home", zone: 0 },
+    ball: {
+      x: 0.5,
+      y: 0.5,
+      ownerSide: "home",
+      ownerPlayerId: homePlayers.find((player) => player.position === "MF")?.id,
+      zone: 0,
+    },
     possession: "home",
     homeTactic: { ...homeTeam.defaultTactic },
     awayTactic: { ...awayTeam.defaultTactic },
@@ -204,6 +210,26 @@ const randomAttacker = (
     candidates[Math.min(candidates.length - 1, Math.floor(result.value * candidates.length))];
   return { player, state: result.state };
 };
+
+const closestOutfieldPlayer = (
+  players: MatchPlayer[],
+  side: Side,
+  x: number,
+  y: number,
+): MatchPlayer | undefined =>
+  players
+    .filter(
+      (player) =>
+        player.side === side &&
+        player.onField &&
+        !player.injured &&
+        player.position !== "GK",
+    )
+    .sort(
+      (first, second) =>
+        Math.hypot(first.x - x, first.y - y) -
+        Math.hypot(second.x - x, second.y - y),
+    )[0];
 
 function prependEvent(state: MatchState, event: MatchEvent): MatchState {
   return { ...state, events: [event, ...state.events].slice(0, 28) };
@@ -299,11 +325,20 @@ function resolveEvent(state: MatchState): MatchState {
     else next.metrics.awayTurnovers += 1;
     const opponentSide = opposition(attackingSide);
     next.possession = opponentSide;
+    const turnoverX = 1 - next.ball.x;
+    const turnoverY = clamp(next.ball.y + (passRoll.value - 0.5) * 0.12, 0.08, 0.92);
     next.ball = {
       ...next.ball,
       ownerSide: opponentSide,
+      ownerPlayerId: closestOutfieldPlayer(
+        next.players,
+        opponentSide,
+        turnoverX,
+        turnoverY,
+      )?.id,
       zone: Math.max(0, 2 - next.ball.zone),
-      x: 1 - next.ball.x,
+      x: turnoverX,
+      y: turnoverY,
     };
     next = prependEvent(next, {
       id: `${next.id}-turnover-${minute}-${next.events.length}`,
@@ -329,10 +364,13 @@ function resolveEvent(state: MatchState): MatchState {
         : 0.35 + sideRoll.value * 0.3;
   const newZone = Math.min(3, next.ball.zone + 1);
   const normalizedX = [0.18, 0.38, 0.64, 0.83][newZone];
+  const ballX = attackingSide === "home" ? normalizedX : 1 - normalizedX;
+  const receiver = closestOutfieldPlayer(next.players, attackingSide, ballX, y);
   next.ball = {
-    x: attackingSide === "home" ? normalizedX : 1 - normalizedX,
+    x: ballX,
     y,
     ownerSide: attackingSide,
+    ownerPlayerId: receiver?.id,
     zone: newZone,
   };
 
@@ -406,6 +444,12 @@ function resolveEvent(state: MatchState): MatchState {
         x: 0.5,
         y: 0.5,
         ownerSide: defendingSide,
+        ownerPlayerId: closestOutfieldPlayer(
+          next.players,
+          defendingSide,
+          0.5,
+          0.5,
+        )?.id,
         zone: 0,
       };
     } else {
@@ -414,6 +458,12 @@ function resolveEvent(state: MatchState): MatchState {
         x: 0.5,
         y: 0.5,
         ownerSide: defendingSide,
+        ownerPlayerId: closestOutfieldPlayer(
+          next.players,
+          defendingSide,
+          0.5,
+          0.5,
+        )?.id,
         zone: 0,
       };
     }
@@ -472,31 +522,101 @@ function drainStamina(state: MatchState, seconds: number): MatchState {
 }
 
 function updatePlayerTargets(state: MatchState): MatchState {
+  const active = state.players.filter(
+    (player) => player.onField && !player.injured,
+  );
+  const nearestDefenders = active
+    .filter(
+      (player) =>
+        player.side !== state.possession && player.position !== "GK",
+    )
+    .sort(
+      (first, second) =>
+        Math.hypot(first.x - state.ball.x, first.y - state.ball.y) -
+        Math.hypot(second.x - state.ball.x, second.y - state.ball.y),
+    )
+    .slice(0, 2)
+    .map((player) => player.id);
+
   const players = state.players.map((player) => {
     if (!player.onField) return player;
     const tactic = tacticFor(state, player.side);
     const hasBall = state.possession === player.side;
     const direction = player.side === "home" ? 1 : -1;
-    const possessionShift = hasBall
-      ? 0.035 + state.ball.zone * 0.018
-      : -0.025;
+    const isCarrier =
+      hasBall &&
+      (state.ball.ownerPlayerId === player.id ||
+        (!state.ball.ownerPlayerId &&
+          closestOutfieldPlayer(
+            active,
+            player.side,
+            state.ball.x,
+            state.ball.y,
+          )?.id === player.id));
+    const pressingIndex = nearestDefenders.indexOf(player.id);
+    const isPresser = pressingIndex >= 0;
+    const outfield = player.position !== "GK";
+    const ballPull = player.position === "FW" ? 0.28 : player.position === "MF" ? 0.2 : 0.1;
+    const attackAdvance =
+      player.position === "FW"
+        ? 0.1
+        : player.position === "MF"
+          ? 0.065
+          : player.position === "DF"
+            ? 0.025
+            : 0;
+    const defensiveRetreat =
+      player.position === "DF"
+        ? 0.055 + state.ball.zone * 0.012
+        : player.position === "MF"
+          ? 0.035
+          : 0.015;
     const lineShift =
       player.position === "DF"
         ? direction * ((tactic.defensiveLine - 50) / 520)
         : 0;
-    const widthScale = 1 + (tactic.width - 50) / 180;
-    const targetY = clamp(0.5 + (player.baseY - 0.5) * widthScale, 0.08, 0.92);
-    const targetX = clamp(
-      player.baseX + direction * possessionShift + lineShift,
-      0.05,
-      0.95,
-    );
+    const widthScale = hasBall
+      ? 1 + (tactic.width - 50) / 130
+      : 0.78 + (tactic.width - 50) / 300;
+    const runWave =
+      outfield
+        ? Math.sin(state.gameMinute * 0.95 + player.number * 1.73) * 0.018
+        : 0;
+
+    let targetX =
+      player.baseX +
+      lineShift +
+      direction * (hasBall ? attackAdvance : -defensiveRetreat) +
+      (state.ball.x - player.baseX) * (hasBall ? ballPull : 0.1);
+    let targetY =
+      0.5 +
+      (player.baseY - 0.5) * widthScale +
+      (state.ball.y - player.baseY) * (hasBall ? ballPull : 0.16) +
+      runWave;
+
+    if (isCarrier) {
+      targetX = state.ball.x - direction * 0.012;
+      targetY = state.ball.y;
+    } else if (isPresser) {
+      const markingOffset = pressingIndex === 0 ? 0.018 : 0.055;
+      targetX = state.ball.x - direction * markingOffset;
+      targetY =
+        state.ball.y + (pressingIndex === 0 ? -0.015 : 0.045) * (player.baseY < 0.5 ? -1 : 1);
+    } else if (player.position === "GK") {
+      targetX = player.baseX;
+      targetY = clamp(0.5 + (state.ball.y - 0.5) * 0.28, 0.38, 0.62);
+    }
+
+    targetX = clamp(targetX, 0.035, 0.965);
+    targetY = clamp(targetY, 0.055, 0.945);
+    const movementRate = isCarrier || isPresser ? 0.42 : 0.3;
+
     return {
       ...player,
       targetX,
       targetY,
-      x: player.x + (targetX - player.x) * 0.16,
-      y: player.y + (targetY - player.y) * 0.16,
+      x: player.x + (targetX - player.x) * movementRate,
+      y: player.y + (targetY - player.y) * movementRate,
     };
   });
   return { ...state, players };

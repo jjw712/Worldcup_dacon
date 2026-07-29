@@ -37,4 +37,23 @@ describe("match engine", () => {
       match.players.every((player) => player.currentStamina >= 0),
     ).toBe(true);
   });
+
+  it("moves players into distinct support and pressing runs", () => {
+    const initial = startMatch(
+      createMatch(MATCH_DEFINITIONS[0], createNewCampaign()),
+    );
+    const evolved = runSeconds(8);
+    const movedPlayers = evolved.players.filter((player) => {
+      const original = initial.players.find(
+        (candidate) => candidate.id === player.id,
+      );
+      return (
+        original &&
+        Math.hypot(player.x - original.x, player.y - original.y) > 0.035
+      );
+    });
+
+    expect(movedPlayers.length).toBeGreaterThanOrEqual(6);
+    expect(evolved.ball.ownerPlayerId).toBeTruthy();
+  });
 });
