@@ -29,7 +29,7 @@ const createCarryState = (): Record<string, CarryPlayerState> =>
         yellowCards: 0,
         suspendedMatches: 0,
         injuryMatchesRemaining: 0,
-        managerTrust: 70 + (player.number % 12),
+        managerTrust: 70 + (player.shirtNumber % 12),
       },
     ]),
   );
@@ -39,9 +39,9 @@ export function createNewCampaign(): CampaignState {
     currentRound: 0,
     standings: {
       KOR: createStanding("KOR"),
-      SEN: createStanding("SEN"),
-      DEN: createStanding("DEN"),
+      CZE: createStanding("CZE"),
       MEX: createStanding("MEX"),
+      RSA: createStanding("RSA"),
     },
     playerCarry: createCarryState(),
     morale: 66,

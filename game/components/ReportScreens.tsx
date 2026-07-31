@@ -188,7 +188,7 @@ export function ReportScreen({
         <p>
           {campaign.completed
             ? "세 경기가 모두 끝났습니다. 이제 캠페인 전체 평가를 확인하십시오."
-            : `다음 상대는 ${TEAMS[["SEN", "DEN", "MEX"][campaign.currentRound] as "SEN" | "DEN" | "MEX"].name}입니다.`}
+            : `다음 상대는 ${TEAMS[["CZE", "MEX", "RSA"][campaign.currentRound] as "CZE" | "MEX" | "RSA"].name}입니다.`}
         </p>
         <button className="button button-primary" onClick={onContinue}>
           {campaign.completed ? "캠페인 최종 평가" : "다음 경기 준비"}

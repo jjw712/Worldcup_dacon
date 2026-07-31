@@ -9,7 +9,9 @@ import type {
   MatchPlayer,
   MatchResult,
   MatchState,
-  PlayerProfile,
+  PlayerAttributes,
+  Position,
+  RosterPlayer,
   Side,
   TacticState,
 } from "../types";
@@ -40,8 +42,28 @@ const emptyMetrics = (): MatchMetrics => ({
   tacticalWins: 0,
 });
 
+/**
+ * Temporary neutral simulation values. They are deliberately not stored in
+ * the official roster dataset and can be replaced when the ability model lands.
+ */
+const simulationAttributesFor = (
+  position: Position,
+  shirtNumber: number,
+): PlayerAttributes => {
+  const variance = ((shirtNumber * 7) % 7) - 3;
+  return {
+    passing: 72 + variance + (position === "MF" ? 4 : 0),
+    shooting: 65 + variance + (position === "FW" ? 8 : 0),
+    defending: 64 + variance + (position === "DF" ? 10 : 0),
+    pace: 72 + variance + (position === "FW" ? 3 : 0),
+    stamina: 75 + variance,
+    tacticalUnderstanding: 74 + variance,
+    roleFamiliarity: 76 + variance,
+  };
+};
+
 const createMatchPlayer = (
-  profile: PlayerProfile,
+  profile: RosterPlayer,
   side: Side,
   slotIndex: number,
   campaign?: CampaignState,
@@ -54,6 +76,8 @@ const createMatchPlayer = (
 
   return {
     ...profile,
+    number: profile.shirtNumber,
+    attributes: simulationAttributesFor(profile.position, profile.shirtNumber),
     side,
     x,
     y: slot.y,
@@ -71,7 +95,18 @@ const createMatchPlayer = (
   };
 };
 
-const availableKoreaPlayers = (campaign: CampaignState): PlayerProfile[] => {
+const selectFormationPlayers = (players: RosterPlayer[]): RosterPlayer[] => {
+  const remaining = [...players];
+  return FORMATION_433.map((slot) => {
+    const index = remaining.findIndex(
+      (player) => player.position === slot.position,
+    );
+    const selectedIndex = index >= 0 ? index : 0;
+    return remaining.splice(selectedIndex, 1)[0];
+  }).filter((player): player is RosterPlayer => Boolean(player));
+};
+
+const availableKoreaPlayers = (campaign: CampaignState): RosterPlayer[] => {
   const available = TEAMS.KOR.roster.filter((player) => {
     const carry = campaign.playerCarry[player.id];
     return (
@@ -82,7 +117,7 @@ const availableKoreaPlayers = (campaign: CampaignState): PlayerProfile[] => {
   const unavailable = TEAMS.KOR.roster.filter(
     (player) => !available.some((candidate) => candidate.id === player.id),
   );
-  return [...available, ...unavailable].slice(0, 11);
+  return selectFormationPlayers([...available, ...unavailable]);
 };
 
 export function createMatch(
@@ -94,8 +129,7 @@ export function createMatch(
   const homePlayers = availableKoreaPlayers(campaign).map((player, index) =>
     createMatchPlayer(player, "home", index, campaign),
   );
-  const awayPlayers = awayTeam.roster
-    .slice(0, 11)
+  const awayPlayers = selectFormationPlayers(awayTeam.roster)
     .map((player, index) => createMatchPlayer(player, "away", index));
 
   const kickoff: MatchEvent = {

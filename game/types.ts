@@ -1,6 +1,18 @@
-export type TeamId = "KOR" | "SEN" | "DEN" | "MEX";
+export type TeamId = "KOR" | "CZE" | "MEX" | "RSA";
 export type Side = "home" | "away";
 export type Position = "GK" | "DF" | "MF" | "FW";
+export type DetailedPosition =
+  | "GK"
+  | "RB"
+  | "CB"
+  | "LB"
+  | "DM"
+  | "CM"
+  | "AM"
+  | "RW"
+  | "LW"
+  | "ST";
+export type PreferredFoot = "LEFT" | "RIGHT" | "BOTH" | "UNKNOWN";
 export type AttackSide = "left" | "center" | "right";
 
 export type MatchPhase =
@@ -34,13 +46,16 @@ export interface PlayerAttributes {
   roleFamiliarity: number;
 }
 
-export interface PlayerProfile {
+export interface RosterPlayer {
   id: string;
   teamId: TeamId;
   name: string;
-  number: number;
+  shirtNumber: number;
   position: Position;
-  attributes: PlayerAttributes;
+  detailedPosition: DetailedPosition;
+  club: string;
+  birthYear: number;
+  preferredFoot: PreferredFoot;
 }
 
 export interface CarryPlayerState {
@@ -52,7 +67,10 @@ export interface CarryPlayerState {
   managerTrust: number;
 }
 
-export interface MatchPlayer extends PlayerProfile {
+export interface MatchPlayer extends RosterPlayer {
+  /** Match UI compatibility alias. Canonical roster field is shirtNumber. */
+  number: number;
+  attributes: PlayerAttributes;
   side: Side;
   x: number;
   y: number;
@@ -90,7 +108,7 @@ export interface TeamDefinition {
   styleDescription: string;
   coachHint: string;
   defaultTactic: TacticState;
-  roster: PlayerProfile[];
+  roster: RosterPlayer[];
 }
 
 export interface MatchDefinition {
