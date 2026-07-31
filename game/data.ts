@@ -1,4 +1,7 @@
-import { GROUP_A_ROSTERS_2026 } from "./rosters2026";
+import {
+  GROUP_A_FORMATIONS_2026,
+  GROUP_A_ROSTERS_2026,
+} from "./rosters2026";
 import type {
   MatchDefinition,
   Position,
@@ -51,6 +54,7 @@ export const TEAMS: Record<TeamId, TeamDefinition> = {
     styleName: "빠른 전환",
     styleDescription: "기동력과 측면 전환을 활용하는 균형형 팀",
     coachHint: "중앙을 단단히 지키고 빠르게 공격 방향을 바꾸는 것이 핵심입니다.",
+    formationName: GROUP_A_FORMATIONS_2026.KOR,
     defaultTactic: defaultTactic(),
     roster: GROUP_A_ROSTERS_2026.KOR,
   },
@@ -63,6 +67,7 @@ export const TEAMS: Record<TeamId, TeamDefinition> = {
     styleName: "제공권과 중앙 압박",
     styleDescription: "강한 체격과 제공권을 앞세워 중앙에서 주도권을 노립니다.",
     coachHint: "장신 공격수에게 향하는 첫 패스를 끊고 세컨드 볼을 선점하세요.",
+    formationName: GROUP_A_FORMATIONS_2026.CZE,
     defaultTactic: defaultTactic({
       pressing: 66,
       defensiveLine: 58,
@@ -81,6 +86,7 @@ export const TEAMS: Record<TeamId, TeamDefinition> = {
     styleName: "측면 수적 우위",
     styleDescription: "높은 점유율과 빠른 패스로 측면에서 수적 우위를 만듭니다.",
     coachHint: "공을 빼앗은 직후 상대 풀백 뒤 공간을 빠르게 공략하세요.",
+    formationName: GROUP_A_FORMATIONS_2026.MEX,
     defaultTactic: defaultTactic({
       pressing: 60,
       defensiveLine: 56,
@@ -99,6 +105,7 @@ export const TEAMS: Record<TeamId, TeamDefinition> = {
     styleName: "속도와 역습",
     styleDescription: "빠른 측면 공격수와 직선적인 전환으로 뒷공간을 노립니다.",
     coachHint: "공격 시 뒤에 충분한 숫자를 남기고 역습 출발점을 먼저 차단하세요.",
+    formationName: GROUP_A_FORMATIONS_2026.RSA,
     defaultTactic: defaultTactic({
       pressing: 43,
       defensiveLine: 40,

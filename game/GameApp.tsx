@@ -19,13 +19,20 @@ import {
 import { applyMatchResult, createNewCampaign } from "./engine/campaign";
 import { applyCommand } from "./engine/commands";
 import {
-  advanceMatch,
+  advanceMatchTicks,
   applyHalfTimeRecovery,
+  cancelPendingSubstitution,
+  configureTacticLoadout,
   continueMatch,
   createMatch,
   createMatchResult,
   moveHomePlayer,
+  queueSubstitution,
+  skipObservationSegment,
   startMatch,
+  substitutePausedPlayer,
+  substitutePreMatchPlayer,
+  switchToSubTactic,
 } from "./engine/matchEngine";
 import type {
   CampaignState,
@@ -42,7 +49,7 @@ type AppScreen =
   | "report"
   | "final";
 
-const STORAGE_KEY = "jammulma-campaign-v1";
+const STORAGE_KEY = "jammulma-campaign-v4";
 const OBSERVATION_PHASES = new Set([
   "OBSERVE_0_22",
   "OBSERVE_22_45",
@@ -60,7 +67,8 @@ export function GameApp() {
   const [lastResult, setLastResult] = useState<MatchResult>();
   const [selectedPlayerId, setSelectedPlayerId] = useState<string>();
   const [memo, setMemo] = useState("");
-  const [playbackSpeed, setPlaybackSpeed] = useState<1 | 2>(1);
+  const [playbackSpeed, setPlaybackSpeed] = useState<1 | 2 | 4>(1);
+  const [isPaused, setIsPaused] = useState(false);
   const handledFinishedMatch = useRef<string>();
 
   useEffect(() => {
@@ -95,6 +103,7 @@ export function GameApp() {
   useEffect(() => {
     if (
       screen !== "match" ||
+      isPaused ||
       !matchPhase ||
       !OBSERVATION_PHASES.has(matchPhase)
     ) {
@@ -103,11 +112,11 @@ export function GameApp() {
 
     const timer = window.setInterval(() => {
       setMatch((current) =>
-        current ? advanceMatch(current, 0.5 * playbackSpeed) : current,
+        current ? advanceMatchTicks(current, playbackSpeed) : current,
       );
     }, 500);
     return () => window.clearInterval(timer);
-  }, [matchPhase, playbackSpeed, screen]);
+  }, [isPaused, matchPhase, playbackSpeed, screen]);
 
   useEffect(() => {
     if (
@@ -127,11 +136,12 @@ export function GameApp() {
   }, [campaign, match, screen]);
 
   const beginNewCampaign = () => {
-    const fresh = createNewCampaign();
+    const fresh = createNewCampaign(Date.now() >>> 0);
     setCampaign(fresh);
     setMatch(undefined);
     setLastResult(undefined);
     setMemo("");
+    setIsPaused(false);
     handledFinishedMatch.current = undefined;
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(fresh));
     setScreen("campaign");
@@ -150,15 +160,15 @@ export function GameApp() {
     const newMatch = createMatch(definition, campaign);
     setMatch(newMatch);
     setMemo("");
-    setSelectedPlayerId(
-      newMatch.players.find((player) => player.side === "home")?.id,
-    );
+    setIsPaused(false);
+    setSelectedPlayerId(undefined);
     handledFinishedMatch.current = undefined;
     setScreen("prematch");
   };
 
   const beginMatch = () => {
     setMatch((current) => (current ? startMatch(current) : current));
+    setIsPaused(false);
     setScreen("match");
   };
 
@@ -181,8 +191,11 @@ export function GameApp() {
   );
 
   const resumeMatch = useCallback(() => {
-    setMatch((current) => (current ? continueMatch(current) : current));
-  }, []);
+    setMatch((current) =>
+      current ? continueMatch(current, campaign.playerCarry) : current,
+    );
+    setIsPaused(false);
+  }, [campaign.playerCarry]);
 
   const goAfterReport = () => {
     setScreen(campaign.completed ? "final" : "campaign");
@@ -219,6 +232,25 @@ export function GameApp() {
             current ? moveHomePlayer(current, playerId, x, y) : current,
           )
         }
+        onSubstitute={(outgoingPlayerId, incomingPlayerId) =>
+          setMatch((current) =>
+            current
+              ? substitutePreMatchPlayer(
+                  current,
+                  outgoingPlayerId,
+                  incomingPlayerId,
+                  campaign.playerCarry[incomingPlayerId],
+                )
+              : current,
+          )
+        }
+        onConfigureTactic={(slot, presetId) =>
+          setMatch((current) =>
+            current
+              ? configureTacticLoadout(current, slot, presetId)
+              : current,
+          )
+        }
         onStart={beginMatch}
         onBack={() => setScreen("campaign")}
       />
@@ -238,6 +270,23 @@ export function GameApp() {
           onApplyCommand={(kind, playerId, cost, randomState) =>
             applyTacticalCommand(kind, playerId, cost, randomState)
           }
+          onQueueSubstitution={(outgoingPlayerId, incomingPlayerId) =>
+            setMatch((current) =>
+              current
+                ? queueSubstitution(current, outgoingPlayerId, incomingPlayerId)
+                : current,
+            )
+          }
+          onCancelSubstitution={(pendingId) =>
+            setMatch((current) =>
+              current ? cancelPendingSubstitution(current, pendingId) : current,
+            )
+          }
+          onSwitchSubTactic={(slot) =>
+            setMatch((current) =>
+              current ? switchToSubTactic(current, slot) : current,
+            )
+          }
           onComplete={resumeMatch}
         />
       );
@@ -253,6 +302,23 @@ export function GameApp() {
               current ? applyHalfTimeRecovery(current) : current,
             )
           }
+          onQueueSubstitution={(outgoingPlayerId, incomingPlayerId) =>
+            setMatch((current) =>
+              current
+                ? queueSubstitution(current, outgoingPlayerId, incomingPlayerId)
+                : current,
+            )
+          }
+          onCancelSubstitution={(pendingId) =>
+            setMatch((current) =>
+              current ? cancelPendingSubstitution(current, pendingId) : current,
+            )
+          }
+          onSwitchSubTactic={(slot) =>
+            setMatch((current) =>
+              current ? switchToSubTactic(current, slot) : current,
+            )
+          }
           onContinue={resumeMatch}
         />
       );
@@ -264,9 +330,36 @@ export function GameApp() {
         selectedPlayerId={selectedPlayerId}
         memo={memo}
         playbackSpeed={playbackSpeed}
+        isPaused={isPaused}
         onSelectPlayer={setSelectedPlayerId}
         onMemoChange={setMemo}
         onPlaybackSpeedChange={setPlaybackSpeed}
+        onPauseChange={(paused) => {
+          setIsPaused(paused);
+          if (paused) setSelectedPlayerId(undefined);
+        }}
+        onSubstitute={(outgoingPlayerId, incomingPlayerId) =>
+          setMatch((current) =>
+            current
+              ? substitutePausedPlayer(
+                  current,
+                  outgoingPlayerId,
+                  incomingPlayerId,
+                  campaign.playerCarry[incomingPlayerId],
+                )
+              : current,
+          )
+        }
+        onSwitchSubTactic={(slot) =>
+          setMatch((current) =>
+            current ? switchToSubTactic(current, slot) : current,
+          )
+        }
+        onSkipToDecision={() =>
+          setMatch((current) =>
+            current ? skipObservationSegment(current) : current,
+          )
+        }
       />
     );
   }

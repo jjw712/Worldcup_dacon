@@ -1,9 +1,19 @@
 "use client";
 
+import { useState } from "react";
 import { MATCH_DEFINITIONS, TEAMS } from "../data";
 import { sortedStandings } from "../engine/campaign";
-import type { CampaignState, MatchState } from "../types";
+import type {
+  CampaignState,
+  MatchState,
+  Side,
+  TacticLoadout,
+  TacticPresetId,
+} from "../types";
+import { PlayerComparisonDialog } from "./PlayerComparisonDialog";
 import { TacticalBoard } from "./TacticalBoard";
+import { TeamRosterPanel } from "./TeamRosterPanel";
+import { TacticPresetSelector } from "./TacticPresetSelector";
 
 interface LandingScreenProps {
   hasSavedCampaign: boolean;
@@ -236,6 +246,11 @@ interface PreMatchScreenProps {
   selectedPlayerId?: string;
   onSelectPlayer: (playerId: string) => void;
   onMovePlayer: (playerId: string, x: number, y: number) => void;
+  onSubstitute: (outgoingPlayerId: string, incomingPlayerId: string) => void;
+  onConfigureTactic: (
+    slot: keyof TacticLoadout,
+    presetId: TacticPresetId,
+  ) => void;
   onStart: () => void;
   onBack: () => void;
 }
@@ -245,12 +260,23 @@ export function PreMatchScreen({
   selectedPlayerId,
   onSelectPlayer,
   onMovePlayer,
+  onSubstitute,
+  onConfigureTactic,
   onStart,
   onBack,
 }: PreMatchScreenProps) {
-  const selectedPlayer = match.players.find(
-    (player) => player.id === selectedPlayerId,
-  );
+  const [viewSide, setViewSide] = useState<Side>("home");
+  const [awaySelectedPlayerId, setAwaySelectedPlayerId] = useState<
+    string | undefined
+  >();
+  const [compareBasePlayerId, setCompareBasePlayerId] = useState<string>();
+  const viewedTeam = viewSide === "home" ? match.homeTeam : match.awayTeam;
+  const viewedSelectedPlayerId =
+    viewSide === "home" ? selectedPlayerId : awaySelectedPlayerId;
+  const selectViewedPlayer = (playerId: string) => {
+    if (viewSide === "home") onSelectPlayer(playerId);
+    else setAwaySelectedPlayerId(playerId);
+  };
 
   return (
     <main className="page-shell prep-page">
@@ -270,7 +296,7 @@ export function PreMatchScreen({
           <h1>{match.awayTeam.name} 분석</h1>
           <div className="style-callout">
             <span>예상 전술</span>
-            <strong>{match.awayTeam.styleName}</strong>
+            <strong>{match.awayTeam.formationName} · {match.awayTeam.styleName}</strong>
             <p>{match.awayTeam.styleDescription}</p>
           </div>
           <ul className="briefing-list">
@@ -281,71 +307,78 @@ export function PreMatchScreen({
               </li>
             ))}
           </ul>
-          <div className="prepared-plan-card">
-            <span>등록 예비 전술</span>
-            <strong>{match.homeTactic.preparedPlan}</strong>
-            <small>브레이크 예상 차감 32~48초</small>
-          </div>
+          <TacticPresetSelector
+            match={match}
+            onAssign={onConfigureTactic}
+            compact
+          />
         </aside>
 
         <section className="prep-board-panel">
           <div className="panel-title-row">
             <div>
-              <span>STARTING XI</span>
-              <h2>선수를 직접 배치하십시오</h2>
+              <span>{viewSide === "home" ? "MY TACTICS" : "OPPONENT VIEW"}</span>
+              <h2>
+                {viewSide === "home"
+                  ? "대한민국 전술 배치"
+                  : `${match.awayTeam.name} 예상 배치`}
+              </h2>
             </div>
-            <p>원을 드래그해 기본 위치를 조정할 수 있습니다.</p>
+            <div className="prematch-team-toggle" aria-label="전술판 팀 전환">
+              <button
+                type="button"
+                className={viewSide === "home" ? "is-active" : ""}
+                onClick={() => {
+                  setViewSide("home");
+                  onSelectPlayer("");
+                }}
+              >
+                우리 팀
+              </button>
+              <button
+                type="button"
+                className={viewSide === "away" ? "is-active" : ""}
+                onClick={() => {
+                  setViewSide("away");
+                  setAwaySelectedPlayerId(undefined);
+                }}
+              >
+                상대 보기
+              </button>
+            </div>
           </div>
           <TacticalBoard
             match={match}
-            selectedPlayerId={selectedPlayerId}
-            editable
-            onSelectPlayer={onSelectPlayer}
+            selectedPlayerId={viewedSelectedPlayerId}
+            editable={viewSide === "home"}
+            selectableSide={viewSide}
+            focusSide={viewSide}
+            onSelectPlayer={selectViewedPlayer}
             onMovePlayer={onMovePlayer}
           />
+          <p className="board-edit-note">
+            {viewSide === "home"
+              ? "선수를 드래그해 위치를 조정할 수 있습니다."
+              : "상대 전술은 스카우팅 예상치이며 열람만 가능합니다."}
+          </p>
         </section>
 
         <aside className="squad-panel">
           <div className="panel-heading">
-            <span>대한민국</span>
-            <strong>4-3-3</strong>
+            <span>{viewSide === "home" ? "우리 팀" : "상대 팀"} · {viewedTeam.name}</span>
+            <strong>{viewedTeam.formationName}</strong>
           </div>
-          <div className="squad-list">
-            {match.players
-              .filter((player) => player.side === "home")
-              .map((player) => (
-                <button
-                  key={player.id}
-                  className={`squad-row ${
-                    selectedPlayerId === player.id ? "is-selected" : ""
-                  }`}
-                  onClick={() => onSelectPlayer(player.id)}
-                >
-                  <span className="jersey-number">{player.number}</span>
-                  <span>
-                    <strong>{player.name}</strong>
-                    <small>{player.position}</small>
-                  </span>
-                  <span className="fitness">
-                    {Math.round(player.currentStamina)}
-                  </span>
-                </button>
-              ))}
-          </div>
-          {selectedPlayer && (
-            <div className="selected-player-card">
-              <span>선택 선수</span>
-              <strong>{selectedPlayer.name}</strong>
-              <div>
-                <small>전술 이해</small>
-                <b>{selectedPlayer.attributes.tacticalUnderstanding}</b>
-              </div>
-              <div>
-                <small>감독 신뢰</small>
-                <b>{selectedPlayer.managerTrust}</b>
-              </div>
-            </div>
-          )}
+          <TeamRosterPanel
+            key={viewSide}
+            match={match}
+            side={viewSide}
+            selectedPlayerId={viewedSelectedPlayerId}
+            onSelectPlayer={selectViewedPlayer}
+            allowSubstitution={viewSide === "home"}
+            substitutionMode="lineup"
+            onSubstitute={onSubstitute}
+            onComparePlayer={setCompareBasePlayerId}
+          />
           <button
             className="button button-primary button-wide"
             onClick={onStart}
@@ -354,6 +387,13 @@ export function PreMatchScreen({
           </button>
         </aside>
       </section>
+      {compareBasePlayerId && (
+        <PlayerComparisonDialog
+          match={match}
+          basePlayerId={compareBasePlayerId}
+          onClose={() => setCompareBasePlayerId(undefined)}
+        />
+      )}
     </main>
   );
 }

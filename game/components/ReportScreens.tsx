@@ -12,9 +12,16 @@ interface ReportScreenProps {
 }
 
 const decisionGrade = (result: MatchResult): string => {
-  if (result.pointsEarned === 3 && result.commands.length >= 3) return "A";
-  if (result.pointsEarned >= 1 && result.commands.length >= 2) return "B+";
-  if (result.commands.length >= 2) return "B";
+  const evaluations = result.commandEvaluations ?? [];
+  const averageExecution = evaluations.length
+    ? evaluations.reduce(
+        (total, evaluation) => total + evaluation.successRate,
+        0,
+      ) / evaluations.length
+    : 35;
+  if (result.pointsEarned === 3 && averageExecution >= 76) return "A";
+  if (averageExecution >= 70) return "B+";
+  if (averageExecution >= 55) return "B";
   return "C";
 };
 
@@ -32,6 +39,15 @@ export function ReportScreen({
       )
     : 0;
   const grade = decisionGrade(result);
+  const evaluations = result.commandEvaluations ?? [];
+  const averageExecution = evaluations.length
+    ? Math.round(
+        evaluations.reduce(
+          (total, evaluation) => total + evaluation.successRate,
+          0,
+        ) / evaluations.length,
+      )
+    : 0;
 
   return (
     <main className="report-shell">
@@ -82,8 +98,26 @@ export function ReportScreen({
                   <div>
                     <strong>{command.label}</strong>
                     <small>{command.minute}분 · {command.cost ? `${command.cost}초 차감` : "하프타임"}</small>
-                    <p className="positive">효과 · {command.effect}</p>
-                    <p className="negative">대가 · {command.tradeoff}</p>
+                    {(() => {
+                      const evaluation = evaluations.find(
+                        (item) => item.commandId === command.id,
+                      );
+                      return evaluation ? (
+                        <>
+                          <div className="evaluation-heading">
+                            <b>{evaluation.successRate}%</b>
+                            <em>{evaluation.status}</em>
+                          </div>
+                          <p className="positive">{evaluation.headline}</p>
+                          <p>{evaluation.detail}</p>
+                        </>
+                      ) : (
+                        <>
+                          <p className="positive">효과 · {command.effect}</p>
+                          <p className="negative">대가 · {command.tradeoff}</p>
+                        </>
+                      );
+                    })()}
                   </div>
                 </div>
               ))
@@ -105,6 +139,11 @@ export function ReportScreen({
           </div>
           <div className="impact-number-grid">
             <div>
+              <span>전술 이행률</span>
+              <strong>{averageExecution}%</strong>
+              <small>{evaluations.length}개 지시 실측</small>
+            </div>
+            <div>
               <span>패스 성공률</span>
               <strong>{passRate}%</strong>
               <small>{result.metrics.homePassSuccess}/{result.metrics.homePassAttempts}</small>
@@ -118,11 +157,6 @@ export function ReportScreen({
               <span>공격권 상실</span>
               <strong>{result.metrics.homeTurnovers}</strong>
               <small>관찰 가능한 문제</small>
-            </div>
-            <div>
-              <span>측면 위협</span>
-              <strong>{result.metrics.homeRightThreat}</strong>
-              <small>상대 {result.metrics.awayRightThreat}</small>
             </div>
           </div>
           <div className="causality-note">

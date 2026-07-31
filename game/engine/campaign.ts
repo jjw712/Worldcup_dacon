@@ -34,9 +34,10 @@ const createCarryState = (): Record<string, CarryPlayerState> =>
     ]),
   );
 
-export function createNewCampaign(): CampaignState {
+export function createNewCampaign(scoutingSeed = 20260731): CampaignState {
   return {
     currentRound: 0,
+    scoutingSeed,
     standings: {
       KOR: createStanding("KOR"),
       CZE: createStanding("CZE"),

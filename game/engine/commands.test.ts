@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { createNewCampaign } from "./campaign";
-import { COMMANDS, applyCommand, calculateCommandCost } from "./commands";
-import { createMatch } from "./matchEngine";
+import {
+  COMMANDS,
+  applyCommand,
+  calculateCommandCost,
+  evaluateCommandImpact,
+} from "./commands";
+import { advanceMatch, createMatch, startMatch } from "./matchEngine";
 import { MATCH_DEFINITIONS } from "../data";
 
 describe("tactical commands", () => {
@@ -44,5 +49,20 @@ describe("tactical commands", () => {
       match.homeTactic.pressing,
     );
     expect(updated.commands[0].tradeoff).toContain("체력");
+  });
+
+  it("measures command execution from post-command match metrics", () => {
+    let match = startMatch(
+      createMatch(MATCH_DEFINITIONS[0], createNewCampaign()),
+    );
+    match = applyCommand(match, "LOWER_LINE", undefined, 24);
+    for (let index = 0; index < 16; index += 1) {
+      match = advanceMatch(match, 0.5);
+    }
+
+    const evaluation = evaluateCommandImpact(match, match.commands[0]);
+    expect(evaluation.successRate).toBeGreaterThanOrEqual(20);
+    expect(evaluation.successRate).toBeLessThanOrEqual(96);
+    expect(evaluation.headline).toContain("수비 기준선");
   });
 });

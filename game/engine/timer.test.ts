@@ -3,14 +3,18 @@ import { calculateBreakRemaining } from "./timer";
 
 describe("calculateBreakRemaining", () => {
   it("decreases three displayed seconds per real second", () => {
-    expect(calculateBreakRemaining(1_000, 8_000, 0)).toBe(159);
+    expect(calculateBreakRemaining(1_000, 8_000)).toBe(159);
   });
 
-  it("deducts command time immediately", () => {
-    expect(calculateBreakRemaining(1_000, 8_000, 38)).toBe(121);
+  it("does not begin before the briefing transition finishes", () => {
+    expect(calculateBreakRemaining(4_000, 1_000)).toBe(180);
   });
 
   it("never returns a negative value", () => {
-    expect(calculateBreakRemaining(0, 70_000, 50)).toBe(0);
+    expect(calculateBreakRemaining(0, 70_000)).toBe(0);
+  });
+
+  it("deducts a delivered command's game-time cost immediately", () => {
+    expect(calculateBreakRemaining(1_000, 2_000, 18)).toBe(159);
   });
 });

@@ -1,0 +1,842 @@
+{
+  "metadata": {
+    "source_file": "wc26_group_a_player_weights.txt",
+    "snapshot": "2026-07-31",
+    "player_count": 104,
+    "disclaimer": "체중은 공개 프로필 및 게임 DB 등록값이며 실시간 실측값이 아닙니다."
+  },
+  "players": {
+    "kor_01": {
+      "name_ko": "김승규",
+      "original_name": "Kim Seung-gyu",
+      "weight_kg": 78,
+      "weight_source": "2026 개별 선수 프로필",
+      "weight_url": "https://sofifa.com/player/191655/seung-gyu-kim/260040",
+      "weight_note": ""
+    },
+    "kor_02": {
+      "name_ko": "이한범",
+      "original_name": "Lee Han-beom",
+      "weight_kg": 84,
+      "weight_source": "FC 26 DataHub/SoFIFA 스냅샷 (2025-09-19)",
+      "weight_url": "https://sofifa.com/player/261062/han-beom-lee/260004/",
+      "weight_note": ""
+    },
+    "kor_03": {
+      "name_ko": "이기혁",
+      "original_name": "Lee Gi-hyuk",
+      "weight_kg": 72,
+      "weight_source": "FC 26 DataHub/SoFIFA 스냅샷 (2025-09-19)",
+      "weight_url": "https://sofifa.com/player/261128/gi-hyeok-lee/260004/",
+      "weight_note": ""
+    },
+    "kor_04": {
+      "name_ko": "김민재",
+      "original_name": "Kim Min-jae",
+      "weight_kg": 81,
+      "weight_source": "FC 26 DataHub/SoFIFA 스냅샷 (2025-09-19)",
+      "weight_url": "https://sofifa.com/player/237086/min-jae-kim/260004/",
+      "weight_note": ""
+    },
+    "kor_05": {
+      "name_ko": "김태현",
+      "original_name": "Kim Tae-hyeon",
+      "weight_kg": 82,
+      "weight_source": "2026 개별 선수 프로필",
+      "weight_url": "https://www.espn.com/soccer/player/_/id/286268/kim-tae-hyeon",
+      "weight_note": ""
+    },
+    "kor_06": {
+      "name_ko": "황인범",
+      "original_name": "Hwang In-beom",
+      "weight_kg": 68,
+      "weight_source": "FC 26 DataHub/SoFIFA 스냅샷 (2025-09-19)",
+      "weight_url": "https://sofifa.com/player/228010/in-beom-hwang/260004/",
+      "weight_note": ""
+    },
+    "kor_07": {
+      "name_ko": "손흥민",
+      "original_name": "Son Heung-min",
+      "weight_kg": 78,
+      "weight_source": "FC 26 DataHub/SoFIFA 스냅샷 (2025-09-19)",
+      "weight_url": "https://sofifa.com/player/200104/heung-min-son/260004/",
+      "weight_note": ""
+    },
+    "kor_08": {
+      "name_ko": "백승호",
+      "original_name": "Paik Seung-ho",
+      "weight_kg": 78,
+      "weight_source": "FC 26 DataHub/SoFIFA 스냅샷 (2025-09-19)",
+      "weight_url": "https://sofifa.com/player/237424/seung-ho-paik/260004/",
+      "weight_note": ""
+    },
+    "kor_09": {
+      "name_ko": "조규성",
+      "original_name": "Cho Gue-sung",
+      "weight_kg": 82,
+      "weight_source": "FC 26 DataHub/SoFIFA 스냅샷 (2025-09-19)",
+      "weight_url": "https://sofifa.com/player/247686/gue-sung-cho/260004/",
+      "weight_note": ""
+    },
+    "kor_10": {
+      "name_ko": "이재성",
+      "original_name": "Lee Jae-sung",
+      "weight_kg": 74,
+      "weight_source": "FC 26 DataHub/SoFIFA 스냅샷 (2025-09-19)",
+      "weight_url": "https://sofifa.com/player/221671/jae-sung-lee/260004/",
+      "weight_note": ""
+    },
+    "kor_11": {
+      "name_ko": "황희찬",
+      "original_name": "Hwang Hee-chan",
+      "weight_kg": 77,
+      "weight_source": "FC 26 DataHub/SoFIFA 스냅샷 (2025-09-19)",
+      "weight_url": "https://sofifa.com/player/226380/hee-chan-hwang/260004/",
+      "weight_note": ""
+    },
+    "kor_12": {
+      "name_ko": "송범근",
+      "original_name": "Song Bum-keun",
+      "weight_kg": 88,
+      "weight_source": "FC 26 DataHub/SoFIFA 스냅샷 (2025-09-19)",
+      "weight_url": "https://sofifa.com/player/238570/bum-keun-song/260004/",
+      "weight_note": ""
+    },
+    "kor_13": {
+      "name_ko": "이태석",
+      "original_name": "Lee Tae-seok",
+      "weight_kg": 70,
+      "weight_source": "FC 26 DataHub/SoFIFA 스냅샷 (2025-09-19)",
+      "weight_url": "https://sofifa.com/player/261063/tae-seok-lee/260004/",
+      "weight_note": ""
+    },
+    "kor_14": {
+      "name_ko": "조위제",
+      "original_name": "Cho Wi-je",
+      "weight_kg": 82,
+      "weight_source": "2026 개별 선수 프로필",
+      "weight_url": "https://sofifa.com/player/267401/wi-je-cho/260036",
+      "weight_note": ""
+    },
+    "kor_15": {
+      "name_ko": "김문환",
+      "original_name": "Kim Moon-hwan",
+      "weight_kg": 64,
+      "weight_source": "FC 26 DataHub/SoFIFA 스냅샷 (2025-09-19)",
+      "weight_url": "https://sofifa.com/player/244800/moon-hwan-kim/260004/",
+      "weight_note": ""
+    },
+    "kor_16": {
+      "name_ko": "박진섭",
+      "original_name": "Park Jin-seob",
+      "weight_kg": 80,
+      "weight_source": "FC 26 DataHub/SoFIFA 스냅샷 (2025-09-19)",
+      "weight_url": "https://sofifa.com/player/243673/jin-seob-park/260004/",
+      "weight_note": ""
+    },
+    "kor_17": {
+      "name_ko": "배준호",
+      "original_name": "Bae Jun-ho",
+      "weight_kg": 70,
+      "weight_source": "FC 26 DataHub/SoFIFA 스냅샷 (2025-09-19)",
+      "weight_url": "https://sofifa.com/player/266774/jun-ho-bae/260004/",
+      "weight_note": ""
+    },
+    "kor_18": {
+      "name_ko": "오현규",
+      "original_name": "Oh Hyeon-gyu",
+      "weight_kg": 83,
+      "weight_source": "FC 26 DataHub/SoFIFA 스냅샷 (2025-09-19)",
+      "weight_url": "https://sofifa.com/player/248712/hyeon-gyu-oh/260004/",
+      "weight_note": ""
+    },
+    "kor_19": {
+      "name_ko": "이강인",
+      "original_name": "Lee Kang-in",
+      "weight_kg": 66,
+      "weight_source": "FC 26 DataHub/SoFIFA 스냅샷 (2025-09-19)",
+      "weight_url": "https://sofifa.com/player/243780/kang-in-lee/260004/",
+      "weight_note": ""
+    },
+    "kor_20": {
+      "name_ko": "양현준",
+      "original_name": "Yang Hyun-jun",
+      "weight_kg": 69,
+      "weight_source": "FC 26 DataHub/SoFIFA 스냅샷 (2025-09-19)",
+      "weight_url": "https://sofifa.com/player/260397/hyun-jun-yang/260004/",
+      "weight_note": ""
+    },
+    "kor_21": {
+      "name_ko": "조현우",
+      "original_name": "Jo Hyeon-woo",
+      "weight_kg": 75,
+      "weight_source": "FC 26 DataHub/SoFIFA 스냅샷 (2025-09-19)",
+      "weight_url": "https://sofifa.com/player/212432/hyeon-woo-jo/260004/",
+      "weight_note": ""
+    },
+    "kor_22": {
+      "name_ko": "설영우",
+      "original_name": "Seol Young-woo",
+      "weight_kg": 72,
+      "weight_source": "2026 개별 선수 프로필",
+      "weight_url": "https://sofifa.com/player/254980/young-woo-seol/260036",
+      "weight_note": ""
+    },
+    "kor_23": {
+      "name_ko": "옌스 카스트로프",
+      "original_name": "Jens Castrop",
+      "weight_kg": 71,
+      "weight_source": "FC 26 DataHub/SoFIFA 스냅샷 (2025-09-19)",
+      "weight_url": "https://sofifa.com/player/264194/jens-castrop/260004/",
+      "weight_note": ""
+    },
+    "kor_24": {
+      "name_ko": "김진규",
+      "original_name": "Kim Jin-gyu",
+      "weight_kg": 68,
+      "weight_source": "FC 26 DataHub/SoFIFA 스냅샷 (2025-09-19)",
+      "weight_url": "https://sofifa.com/player/227659/jin-kyu-kim/260004/",
+      "weight_note": ""
+    },
+    "kor_25": {
+      "name_ko": "엄지성",
+      "original_name": "Eom Ji-sung",
+      "weight_kg": 70,
+      "weight_source": "FC 26 DataHub/SoFIFA 스냅샷 (2025-09-19)",
+      "weight_url": "https://sofifa.com/player/260492/ji-sung-eom/260004/",
+      "weight_note": ""
+    },
+    "kor_26": {
+      "name_ko": "이동경",
+      "original_name": "Lee Dong-gyeong",
+      "weight_kg": 69,
+      "weight_source": "FC 26 DataHub/SoFIFA 스냅샷 (2025-09-19)",
+      "weight_url": "https://sofifa.com/player/245054/dong-kyeong-lee/260004/",
+      "weight_note": ""
+    },
+    "mex_01": {
+      "name_ko": "라울 랑헬",
+      "original_name": "Raúl Rangel",
+      "weight_kg": 81,
+      "weight_source": "FC 26 DataHub/SoFIFA 스냅샷 (2025-09-19)",
+      "weight_url": "https://sofifa.com/player/73325/raul-rangel/260004/",
+      "weight_note": ""
+    },
+    "mex_02": {
+      "name_ko": "호르헤 산체스",
+      "original_name": "Jorge Sánchez",
+      "weight_kg": 71,
+      "weight_source": "FC 26 DataHub/SoFIFA 스냅샷 (2025-09-19)",
+      "weight_url": "https://sofifa.com/player/233493/jorge-sanchez/260004/",
+      "weight_note": ""
+    },
+    "mex_03": {
+      "name_ko": "세사르 몬테스",
+      "original_name": "César Montes",
+      "weight_kg": 84,
+      "weight_source": "FC 26 DataHub/SoFIFA 스냅샷 (2025-09-19)",
+      "weight_url": "https://sofifa.com/player/229980/cesar-montes/260004/",
+      "weight_note": ""
+    },
+    "mex_04": {
+      "name_ko": "에드손 알바레스",
+      "original_name": "Edson Álvarez",
+      "weight_kg": 73,
+      "weight_source": "FC 26 DataHub/SoFIFA 스냅샷 (2025-09-19)",
+      "weight_url": "https://sofifa.com/player/235844/edson-alvarez/260004/",
+      "weight_note": ""
+    },
+    "mex_05": {
+      "name_ko": "요한 바스케스",
+      "original_name": "Johan Vásquez",
+      "weight_kg": 72,
+      "weight_source": "FC 26 DataHub/SoFIFA 스냅샷 (2025-09-19)",
+      "weight_url": "https://sofifa.com/player/244349/johan-vasquez/260004/",
+      "weight_note": ""
+    },
+    "mex_06": {
+      "name_ko": "에리크 리라",
+      "original_name": "Érik Lira",
+      "weight_kg": 70,
+      "weight_source": "FC 26 DataHub/SoFIFA 스냅샷 (2025-09-19)",
+      "weight_url": "https://sofifa.com/player/257784/erik-lira/260004/",
+      "weight_note": ""
+    },
+    "mex_07": {
+      "name_ko": "루이스 로모",
+      "original_name": "Luis Romo",
+      "weight_kg": 84,
+      "weight_source": "2026 개별 선수 프로필",
+      "weight_url": "https://sofifa.com/player/243015/luis-romo/260039",
+      "weight_note": ""
+    },
+    "mex_08": {
+      "name_ko": "알바로 피달고",
+      "original_name": "Álvaro Fidalgo",
+      "weight_kg": 68,
+      "weight_source": "2026 개별 선수 프로필",
+      "weight_url": "https://www.footballtransfers.com/us/players/alvaro-fidalgo-fernandez",
+      "weight_note": "비고: 다른 프로필에 54kg도 있으나 최신 FootballTransfers/BDFutbol의 68kg 채택"
+    },
+    "mex_09": {
+      "name_ko": "라울 히메네스",
+      "original_name": "Raúl Jiménez",
+      "weight_kg": 81,
+      "weight_source": "FC 26 DataHub/SoFIFA 스냅샷 (2025-09-19)",
+      "weight_url": "https://sofifa.com/player/204838/raul-jimenez/260004/",
+      "weight_note": ""
+    },
+    "mex_10": {
+      "name_ko": "알렉시스 베가",
+      "original_name": "Alexis Vega",
+      "weight_kg": 77,
+      "weight_source": "FC 26 DataHub/SoFIFA 스냅샷 (2025-09-19)",
+      "weight_url": "https://sofifa.com/player/233260/alexis-vega/260004/",
+      "weight_note": ""
+    },
+    "mex_11": {
+      "name_ko": "산티아고 히메네스",
+      "original_name": "Santiago Giménez",
+      "weight_kg": 68,
+      "weight_source": "FC 26 DataHub/SoFIFA 스냅샷 (2025-09-19)",
+      "weight_url": "https://sofifa.com/player/245152/santiago-gimenez/260004/",
+      "weight_note": ""
+    },
+    "mex_12": {
+      "name_ko": "카를로스 아세베도",
+      "original_name": "Carlos Acevedo",
+      "weight_kg": 74,
+      "weight_source": "2026 개별 선수 프로필",
+      "weight_url": "https://sofifa.com/player/235183/carlos-acevedo/260031",
+      "weight_note": ""
+    },
+    "mex_13": {
+      "name_ko": "기예르모 오초아",
+      "original_name": "Guillermo Ochoa",
+      "weight_kg": 78,
+      "weight_source": "2026 개별 선수 프로필",
+      "weight_url": "https://www.bdfutbol.com/en/j/j18156.html",
+      "weight_note": "비고: 출처별 73~85kg; BDFutbol의 78kg 채택"
+    },
+    "mex_14": {
+      "name_ko": "아르만도 곤살레스",
+      "original_name": "Armando González",
+      "weight_kg": 68,
+      "weight_source": "2026 개별 선수 프로필",
+      "weight_url": "https://sofifa.com/player/84061/armando-gonzalez/260046",
+      "weight_note": ""
+    },
+    "mex_15": {
+      "name_ko": "이스라엘 레예스",
+      "original_name": "Israel Reyes",
+      "weight_kg": 73,
+      "weight_source": "2026 개별 선수 프로필",
+      "weight_url": "https://sofifa.com/player/252008/israel-reyes/260037",
+      "weight_note": ""
+    },
+    "mex_16": {
+      "name_ko": "훌리안 키뇨네스",
+      "original_name": "Julián Quiñones",
+      "weight_kg": 78,
+      "weight_source": "FC 26 DataHub/SoFIFA 스냅샷 (2025-09-19)",
+      "weight_url": "https://sofifa.com/player/234579/julian-quinones/260004/",
+      "weight_note": ""
+    },
+    "mex_17": {
+      "name_ko": "오르벨린 피네다",
+      "original_name": "Orbelín Pineda",
+      "weight_kg": 65,
+      "weight_source": "FC 26 DataHub/SoFIFA 스냅샷 (2025-09-19)",
+      "weight_url": "https://sofifa.com/player/224574/orbelin-pineda/260004/",
+      "weight_note": ""
+    },
+    "mex_18": {
+      "name_ko": "오베드 바르가스",
+      "original_name": "Obed Vargas",
+      "weight_kg": 68,
+      "weight_source": "FC 26 DataHub/SoFIFA 스냅샷 (2025-09-19)",
+      "weight_url": "https://sofifa.com/player/263701/obed-vargas/260004/",
+      "weight_note": ""
+    },
+    "mex_19": {
+      "name_ko": "힐베르토 모라",
+      "original_name": "Gilberto Mora",
+      "weight_kg": 65,
+      "weight_source": "2026 개별 선수 프로필",
+      "weight_url": "https://sofifa.com/player/79399/gilberto-mora/260046",
+      "weight_note": "비고: 출처별 51~65kg; 2026 SoFIFA의 65kg 채택"
+    },
+    "mex_20": {
+      "name_ko": "마테오 차베스",
+      "original_name": "Mateo Chávez",
+      "weight_kg": 72,
+      "weight_source": "FC 26 DataHub/SoFIFA 스냅샷 (2025-09-19)",
+      "weight_url": "https://sofifa.com/player/78784/mateo-chavez/260004/",
+      "weight_note": ""
+    },
+    "mex_21": {
+      "name_ko": "세사르 우에르타",
+      "original_name": "César Huerta",
+      "weight_kg": 67,
+      "weight_source": "FC 26 DataHub/SoFIFA 스냅샷 (2025-09-19)",
+      "weight_url": "https://sofifa.com/player/246289/cesar-huerta/260004/",
+      "weight_note": ""
+    },
+    "mex_22": {
+      "name_ko": "기예르모 마르티네스",
+      "original_name": "Guillermo Martínez",
+      "weight_kg": 91,
+      "weight_source": "2026 개별 선수 프로필",
+      "weight_url": "https://www.footballtransfers.com/us/players/guillermo-martinez",
+      "weight_note": "비고: 출처별 91~93kg; 최신 FootballTransfers의 91kg 채택"
+    },
+    "mex_23": {
+      "name_ko": "헤수스 가야르도",
+      "original_name": "Jesús Gallardo",
+      "weight_kg": 73,
+      "weight_source": "FC 26 DataHub/SoFIFA 스냅샷 (2025-09-19)",
+      "weight_url": "https://sofifa.com/player/226045/jesus-gallardo/260004/",
+      "weight_note": ""
+    },
+    "mex_24": {
+      "name_ko": "루이스 차베스",
+      "original_name": "Luis Chávez",
+      "weight_kg": 73,
+      "weight_source": "2026 개별 선수 프로필",
+      "weight_url": "https://sofifa.com/player/222382/luis-chavez/260036",
+      "weight_note": ""
+    },
+    "mex_25": {
+      "name_ko": "로베르토 알바라도",
+      "original_name": "Roberto Alvarado",
+      "weight_kg": 70,
+      "weight_source": "FC 26 DataHub/SoFIFA 스냅샷 (2025-09-19)",
+      "weight_url": "https://sofifa.com/player/237043/roberto-alvarado/260004/",
+      "weight_note": ""
+    },
+    "mex_26": {
+      "name_ko": "브라이언 구티에레스",
+      "original_name": "Brian Gutiérrez",
+      "weight_kg": 64,
+      "weight_source": "FC 26 DataHub/SoFIFA 스냅샷 (2025-09-19)",
+      "weight_url": "https://sofifa.com/player/260984/brian-gutierrez/260004/",
+      "weight_note": ""
+    },
+    "cze_01": {
+      "name_ko": "마테이 코바르",
+      "original_name": "Matěj Kovář",
+      "weight_kg": 89,
+      "weight_source": "FC 26 DataHub/SoFIFA 스냅샷 (2025-09-19)",
+      "weight_url": "https://sofifa.com/player/242948/matej-kovar/260004/",
+      "weight_note": ""
+    },
+    "cze_02": {
+      "name_ko": "다비트 지마",
+      "original_name": "David Zima",
+      "weight_kg": 80,
+      "weight_source": "FC 26 DataHub/SoFIFA 스냅샷 (2025-09-19)",
+      "weight_url": "https://sofifa.com/player/255687/david-zima/260004/",
+      "weight_note": ""
+    },
+    "cze_03": {
+      "name_ko": "토마시 홀레시",
+      "original_name": "Tomáš Holeš",
+      "weight_kg": 73,
+      "weight_source": "FC 26 DataHub/SoFIFA 스냅샷 (2025-09-19)",
+      "weight_url": "https://sofifa.com/player/251116/tomas-holes/260004/",
+      "weight_note": ""
+    },
+    "cze_04": {
+      "name_ko": "로빈 흐라나치",
+      "original_name": "Robin Hranáč",
+      "weight_kg": 87,
+      "weight_source": "FC 26 DataHub/SoFIFA 스냅샷 (2025-09-19)",
+      "weight_url": "https://sofifa.com/player/276646/robin-hranac/260004/",
+      "weight_note": ""
+    },
+    "cze_05": {
+      "name_ko": "블라디미르 초우팔",
+      "original_name": "Vladimír Coufal",
+      "weight_kg": 76,
+      "weight_source": "FC 26 DataHub/SoFIFA 스냅샷 (2025-09-19)",
+      "weight_url": "https://sofifa.com/player/244470/vladimir-coufal/260004/",
+      "weight_note": ""
+    },
+    "cze_06": {
+      "name_ko": "슈테판 할로우페크",
+      "original_name": "Štěpán Chaloupek",
+      "weight_kg": 68,
+      "weight_source": "2026 개별 선수 프로필",
+      "weight_url": "https://sofifa.com/player/73456/stepan-chaloupek/260046",
+      "weight_note": ""
+    },
+    "cze_07": {
+      "name_ko": "라디슬라프 크레이치",
+      "original_name": "Ladislav Krejčí",
+      "weight_kg": 87,
+      "weight_source": "FC 26 DataHub/SoFIFA 스냅샷 (2025-09-19)",
+      "weight_url": "https://sofifa.com/player/252064/ladislav-krejci/260004/",
+      "weight_note": ""
+    },
+    "cze_08": {
+      "name_ko": "블라디미르 다리다",
+      "original_name": "Vladimír Darida",
+      "weight_kg": 67,
+      "weight_source": "2026 개별 선수 프로필",
+      "weight_url": "https://sofifa.com/player/201262/vladimir-darida/260029",
+      "weight_note": ""
+    },
+    "cze_09": {
+      "name_ko": "아담 흘로제크",
+      "original_name": "Adam Hložek",
+      "weight_kg": 84,
+      "weight_source": "FC 26 DataHub/SoFIFA 스냅샷 (2025-09-19)",
+      "weight_url": "https://sofifa.com/player/246618/adam-hlozek/260004/",
+      "weight_note": ""
+    },
+    "cze_10": {
+      "name_ko": "파트리크 시크",
+      "original_name": "Patrik Schick",
+      "weight_kg": 87,
+      "weight_source": "FC 26 DataHub/SoFIFA 스냅샷 (2025-09-19)",
+      "weight_url": "https://sofifa.com/player/234236/patrik-schick/260004/",
+      "weight_note": ""
+    },
+    "cze_11": {
+      "name_ko": "얀 쿠흐타",
+      "original_name": "Jan Kuchta",
+      "weight_kg": 81,
+      "weight_source": "FC 26 DataHub/SoFIFA 스냅샷 (2025-09-19)",
+      "weight_url": "https://sofifa.com/player/257536/jan-kuchta/260004/",
+      "weight_note": ""
+    },
+    "cze_12": {
+      "name_ko": "루카시 체르프",
+      "original_name": "Lukáš Červ",
+      "weight_kg": 74,
+      "weight_source": "FC 26 DataHub/SoFIFA 스냅샷 (2025-09-19)",
+      "weight_url": "https://sofifa.com/player/71259/lukas-cerv/260004/",
+      "weight_note": ""
+    },
+    "cze_13": {
+      "name_ko": "모이미르 히틸",
+      "original_name": "Mojmír Chytil",
+      "weight_kg": 82,
+      "weight_source": "FC 26 DataHub/SoFIFA 스냅샷 (2025-09-19)",
+      "weight_url": "https://sofifa.com/player/274906/mojmir-chytil/260004/",
+      "weight_note": ""
+    },
+    "cze_14": {
+      "name_ko": "다비트 유라세크",
+      "original_name": "David Jurásek",
+      "weight_kg": 76,
+      "weight_source": "FC 26 DataHub/SoFIFA 스냅샷 (2025-09-19)",
+      "weight_url": "https://sofifa.com/player/267594/david-jurasek/260004/",
+      "weight_note": ""
+    },
+    "cze_15": {
+      "name_ko": "파벨 슐츠",
+      "original_name": "Pavel Šulc",
+      "weight_kg": 67,
+      "weight_source": "FC 26 DataHub/SoFIFA 스냅샷 (2025-09-19)",
+      "weight_url": "https://sofifa.com/player/247050/pavel-sulc/260004/",
+      "weight_note": ""
+    },
+    "cze_16": {
+      "name_ko": "인드르지흐 스타네크",
+      "original_name": "Jindřich Staněk",
+      "weight_kg": 90,
+      "weight_source": "FC 26 DataHub/SoFIFA 스냅샷 (2025-09-19)",
+      "weight_url": "https://sofifa.com/player/221909/jindrich-stanek/260004/",
+      "weight_note": ""
+    },
+    "cze_17": {
+      "name_ko": "루카시 프로보트",
+      "original_name": "Lukáš Provod",
+      "weight_kg": 85,
+      "weight_source": "FC 26 DataHub/SoFIFA 스냅샷 (2025-09-19)",
+      "weight_url": "https://sofifa.com/player/253727/lukas-provod/260004/",
+      "weight_note": ""
+    },
+    "cze_18": {
+      "name_ko": "미할 사딜레크",
+      "original_name": "Michal Sadílek",
+      "weight_kg": 63,
+      "weight_source": "FC 26 DataHub/SoFIFA 스냅샷 (2025-09-19)",
+      "weight_url": "https://sofifa.com/player/245209/michal-sadilek/260004/",
+      "weight_note": ""
+    },
+    "cze_19": {
+      "name_ko": "토마시 호리",
+      "original_name": "Tomáš Chorý",
+      "weight_kg": 101,
+      "weight_source": "FC 26 DataHub/SoFIFA 스냅샷 (2025-09-19)",
+      "weight_url": "https://sofifa.com/player/244793/tomas-chory/260004/",
+      "weight_note": ""
+    },
+    "cze_20": {
+      "name_ko": "야로슬라프 젤레니",
+      "original_name": "Jaroslav Zelený",
+      "weight_kg": 79,
+      "weight_source": "FC 26 DataHub/SoFIFA 스냅샷 (2025-09-19)",
+      "weight_url": "https://sofifa.com/player/199323/jaroslav-zeleny/260004/",
+      "weight_note": ""
+    },
+    "cze_21": {
+      "name_ko": "다비트 도우데라",
+      "original_name": "David Douděra",
+      "weight_kg": 66,
+      "weight_source": "FC 26 DataHub/SoFIFA 스냅샷 (2025-09-19)",
+      "weight_url": "https://sofifa.com/player/269509/david-doudera/260004/",
+      "weight_note": ""
+    },
+    "cze_22": {
+      "name_ko": "토마시 소우체크",
+      "original_name": "Tomáš Souček",
+      "weight_kg": 86,
+      "weight_source": "FC 26 DataHub/SoFIFA 스냅샷 (2025-09-19)",
+      "weight_url": "https://sofifa.com/player/236792/tomas-soucek/260004/",
+      "weight_note": ""
+    },
+    "cze_23": {
+      "name_ko": "루카시 호르니체크",
+      "original_name": "Lukáš Horníček",
+      "weight_kg": 90,
+      "weight_source": "FC 26 DataHub/SoFIFA 스냅샷 (2025-09-19)",
+      "weight_url": "https://sofifa.com/player/258936/lukas-hornicek/260004/",
+      "weight_note": ""
+    },
+    "cze_24": {
+      "name_ko": "알렉산드르 소이카",
+      "original_name": "Alexandr Sojka",
+      "weight_kg": 75,
+      "weight_source": "2026 개별 선수 프로필",
+      "weight_url": "https://sofifa.com/player/74419/alexandr-sojka/260046",
+      "weight_note": ""
+    },
+    "cze_25": {
+      "name_ko": "우고 소후레크",
+      "original_name": "Hugo Sochůrek",
+      "weight_kg": 75,
+      "weight_source": "2026 개별 선수 프로필",
+      "weight_url": "https://sofifa.com/player/86210/hugo-sochurek/260036",
+      "weight_note": ""
+    },
+    "cze_26": {
+      "name_ko": "데니스 비신스키",
+      "original_name": "Denis Višinský",
+      "weight_kg": 69,
+      "weight_source": "FC 26 DataHub/SoFIFA 스냅샷 (2025-09-19)",
+      "weight_url": "https://sofifa.com/player/80073/denis-visinsky/260004/",
+      "weight_note": ""
+    },
+    "rsa_01": {
+      "name_ko": "론웬 윌리엄스",
+      "original_name": "Ronwen Williams",
+      "weight_kg": 81,
+      "weight_source": "2026 개별 선수 프로필",
+      "weight_url": "https://sofifa.com/player/213615/ronwen-williams/260037",
+      "weight_note": "비고: ESPN 78kg·AiScore 79kg·SoFIFA 81kg; 게임 기준 81kg 채택"
+    },
+    "rsa_02": {
+      "name_ko": "타방 마툴루디",
+      "original_name": "Thabang Matuludi",
+      "weight_kg": 83,
+      "weight_source": "2026 개별 선수 프로필",
+      "weight_url": "https://sofifa.com/player/82487/thabang-matuludi/260034",
+      "weight_note": "비고: ESPN 약 74kg·SoFIFA 83kg; 게임 기준 83kg 채택"
+    },
+    "rsa_03": {
+      "name_ko": "쿨루마니 은다마네",
+      "original_name": "Khulumani Ndamane",
+      "weight_kg": 76,
+      "weight_source": "2026 개별 선수 프로필",
+      "weight_url": "https://sofifa.com/player/82493/khulumani-ndamane/",
+      "weight_note": ""
+    },
+    "rsa_04": {
+      "name_ko": "테보호 모코에나",
+      "original_name": "Teboho Mokoena",
+      "weight_kg": 71,
+      "weight_source": "2026 개별 선수 프로필",
+      "weight_url": "https://sofifa.com/player/242936/teboho-mokoena/260034",
+      "weight_note": ""
+    },
+    "rsa_05": {
+      "name_ko": "탈렌테 음바타",
+      "original_name": "Thalente Mbatha",
+      "weight_kg": 73,
+      "weight_source": "2026 개별 선수 프로필",
+      "weight_url": "https://sofifa.com/player/82497/thalente-mbatha/260040",
+      "weight_note": ""
+    },
+    "rsa_06": {
+      "name_ko": "오브리 모디바",
+      "original_name": "Aubrey Modiba",
+      "weight_kg": 71,
+      "weight_source": "2026 개별 선수 프로필",
+      "weight_url": "https://sofifa.com/player/242935/aubrey-modiba/260040",
+      "weight_note": ""
+    },
+    "rsa_07": {
+      "name_ko": "오스윈 아폴리스",
+      "original_name": "Oswin Appollis",
+      "weight_kg": 67,
+      "weight_source": "2026 개별 선수 프로필",
+      "weight_url": "https://sofifa.com/player/82294/oswin-appollis/260034",
+      "weight_note": ""
+    },
+    "rsa_08": {
+      "name_ko": "체팡 모레미",
+      "original_name": "Tshepang Moremi",
+      "weight_kg": 62,
+      "weight_source": "2026 개별 선수 프로필",
+      "weight_url": "https://sofifa.com/player/82507/tshepang-moremi/",
+      "weight_note": ""
+    },
+    "rsa_09": {
+      "name_ko": "라일 포스터",
+      "original_name": "Lyle Foster",
+      "weight_kg": 70,
+      "weight_source": "FC 26 DataHub/SoFIFA 스냅샷 (2025-09-19)",
+      "weight_url": "https://sofifa.com/player/241173/lyle-foster/260004/",
+      "weight_note": ""
+    },
+    "rsa_10": {
+      "name_ko": "렐레보힐레 모포켕",
+      "original_name": "Relebohile Mofokeng",
+      "weight_kg": 58,
+      "weight_source": "2026 개별 선수 프로필",
+      "weight_url": "https://sofifa.com/player/82509/relebohile-mofokeng/260034",
+      "weight_note": "비고: 출처별 55~69kg; 2026 SoFIFA의 58kg 채택"
+    },
+    "rsa_11": {
+      "name_ko": "템바 즈와네",
+      "original_name": "Themba Zwane",
+      "weight_kg": 69,
+      "weight_source": "2026 개별 선수 프로필",
+      "weight_url": "https://sofifa.com/player/222560/themba-zwane/260035",
+      "weight_note": ""
+    },
+    "rsa_12": {
+      "name_ko": "타펠로 마세코",
+      "original_name": "Thapelo Maseko",
+      "weight_kg": 74,
+      "weight_source": "2026 개별 선수 프로필",
+      "weight_url": "https://sofifa.com/player/84685/thapelo-maseko/",
+      "weight_note": ""
+    },
+    "rsa_13": {
+      "name_ko": "스페펠렐로 시톨레",
+      "original_name": "Sphephelo Sithole",
+      "weight_kg": 80,
+      "weight_source": "FC 26 DataHub/SoFIFA 스냅샷 (2025-09-19)",
+      "weight_url": "https://sofifa.com/player/257293/sphephelo-sithole/260004/",
+      "weight_note": ""
+    },
+    "rsa_14": {
+      "name_ko": "음베케젤리 음보카지",
+      "original_name": "Mbekezeli Mbokazi",
+      "weight_kg": 86,
+      "weight_source": "2026 개별 선수 프로필",
+      "weight_url": "https://sofifa.com/player/82308/mbekezeli-mbokazi/260025",
+      "weight_note": ""
+    },
+    "rsa_15": {
+      "name_ko": "이크람 레이너스",
+      "original_name": "Iqraam Rayners",
+      "weight_kg": 72,
+      "weight_source": "2026 개별 선수 프로필",
+      "weight_url": "https://sofifa.com/player/82883/iqraam-rayners/260037",
+      "weight_note": ""
+    },
+    "rsa_16": {
+      "name_ko": "시포 체인",
+      "original_name": "Sipho Chaine",
+      "weight_kg": 78,
+      "weight_source": "2026 개별 선수 프로필",
+      "weight_url": "https://sofifa.com/player/271875/sipho-chaine/260034",
+      "weight_note": ""
+    },
+    "rsa_17": {
+      "name_ko": "에비던스 마고파",
+      "original_name": "Evidence Makgopa",
+      "weight_kg": 76,
+      "weight_source": "2026 개별 선수 프로필",
+      "weight_url": "https://sofifa.com/player/262638/evidence-makgopa/260032",
+      "weight_note": ""
+    },
+    "rsa_18": {
+      "name_ko": "사무켈레 카비니",
+      "original_name": "Samukele Kabini",
+      "weight_kg": 72,
+      "weight_source": "FC 26 DataHub/SoFIFA 스냅샷 (2025-09-19)",
+      "weight_url": "https://sofifa.com/player/77951/samukele-kabini/260004/",
+      "weight_note": ""
+    },
+    "rsa_19": {
+      "name_ko": "은코시나티 시비시",
+      "original_name": "Nkosinathi Sibisi",
+      "weight_kg": 77,
+      "weight_source": "2026 개별 선수 프로필",
+      "weight_url": "https://sofifa.com/player/269625/nkosinathi-sibisi/260034",
+      "weight_note": ""
+    },
+    "rsa_20": {
+      "name_ko": "쿨리소 무다우",
+      "original_name": "Khuliso Mudau",
+      "weight_kg": 72,
+      "weight_source": "2026 개별 선수 프로필",
+      "weight_url": "https://sofifa.com/player/270951/khuliso-mudau/260034",
+      "weight_note": ""
+    },
+    "rsa_21": {
+      "name_ko": "이메 오콘",
+      "original_name": "Ime Okon",
+      "weight_kg": 86,
+      "weight_source": "FC 26 DataHub/SoFIFA 스냅샷 (2025-09-19)",
+      "weight_url": "https://sofifa.com/player/79280/ime-okon/260004/",
+      "weight_note": ""
+    },
+    "rsa_22": {
+      "name_ko": "리카르도 고스",
+      "original_name": "Ricardo Goss",
+      "weight_kg": 75,
+      "weight_source": "2026 개별 선수 프로필",
+      "weight_url": "https://sofifa.com/player/253949/ricardo-goss/260037",
+      "weight_note": ""
+    },
+    "rsa_23": {
+      "name_ko": "제이든 애덤스",
+      "original_name": "Jayden Adams",
+      "weight_kg": 76,
+      "weight_source": "2026 개별 선수 프로필",
+      "weight_url": "https://sofifa.com/player/84684/jayden-adams/260035",
+      "weight_note": ""
+    },
+    "rsa_24": {
+      "name_ko": "올웨투 마칸야",
+      "original_name": "Olwethu Makhanya",
+      "weight_kg": 72,
+      "weight_source": "FC 26 DataHub/SoFIFA 스냅샷 (2025-09-19)",
+      "weight_url": "https://sofifa.com/player/278688/olwethu-makhanya/260004/",
+      "weight_note": ""
+    },
+    "rsa_25": {
+      "name_ko": "카모겔로 세벨레벨레",
+      "original_name": "Kamogelo Sebelebele",
+      "weight_kg": 74,
+      "weight_source": "2026 개별 선수 프로필",
+      "weight_url": "https://sofifa.com/player/86128/kamogelo-sebelebele/",
+      "weight_note": ""
+    },
+    "rsa_26": {
+      "name_ko": "브래들리 크로스",
+      "original_name": "Bradley Cross",
+      "weight_kg": 77,
+      "weight_source": "2026 개별 선수 프로필",
+      "weight_url": "https://sofifa.com/player/259293/bradley-cross/260036",
+      "weight_note": ""
+    }
+  }
+}

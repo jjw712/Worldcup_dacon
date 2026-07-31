@@ -1,15 +1,24 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { COMMANDS, calculateCommandCost } from "../engine/commands";
+import {
+  BREAK_COMMAND_KINDS,
+  COMMANDS,
+  calculateCommandCost,
+  evaluateCommandImpact,
+} from "../engine/commands";
 import { averageTeamStamina } from "../engine/matchEngine";
 import { calculateBreakRemaining } from "../engine/timer";
 import type {
   CommandKind,
+  MatchPlayer,
   MatchPhase,
   MatchState,
 } from "../types";
+import { PlayerComparisonDialog } from "./PlayerComparisonDialog";
 import { TacticalBoard } from "./TacticalBoard";
+import { TeamRosterPanel } from "./TeamRosterPanel";
+import { SubTacticSwitcher } from "./TacticPresetSelector";
 
 const PHASE_LABELS: Partial<Record<MatchPhase, string>> = {
   OBSERVE_0_22: "전반 0~22분",
@@ -18,14 +27,240 @@ const PHASE_LABELS: Partial<Record<MatchPhase, string>> = {
   OBSERVE_67_90: "후반 67~90분",
 };
 
+const DELIVERY_ANIMATION_MS = 800;
+
+const footLabel = {
+  LEFT: "왼발",
+  RIGHT: "오른발",
+  BOTH: "양발",
+  UNKNOWN: "확인 전",
+} as const;
+
+function PlayerDetailDialog({
+  player,
+  match,
+  onClose,
+}: {
+  player: MatchPlayer;
+  match: MatchState;
+  onClose: () => void;
+}) {
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const personalCommands = match.commands.filter(
+    (command) => command.targetPlayerId === player.id,
+  );
+  const mainAbilities =
+    player.position === "GK"
+      ? [
+          ["반사 신경", player.advancedAbilities.gkReflexes],
+          ["핸들링", player.advancedAbilities.gkHandling],
+          ["배급", player.advancedAbilities.gkDistribution],
+          ["위치 선정", player.advancedAbilities.gkPositioning],
+          ["공중볼", player.advancedAbilities.gkAerialCommand],
+          ["일대일", player.advancedAbilities.gkOneOnOnes],
+        ]
+      : [
+          ["슈팅", player.coreAbilities.shooting],
+          [
+            "볼 컨트롤",
+            player.advancedAbilities.ballControl ?? player.coreAbilities.dribbling,
+          ],
+          ["패스", player.coreAbilities.passing],
+          ["수비", player.coreAbilities.defending],
+          ["속도", player.coreAbilities.pace],
+          ["피지컬", player.coreAbilities.physical],
+        ];
+  const advancedAbilityGroups = [
+    {
+      label: "기술",
+      values: [
+        ["드리블", player.coreAbilities.dribbling],
+        ["퍼스트 터치", player.advancedAbilities.firstTouch],
+        ["골 결정력", player.advancedAbilities.finishing],
+        ["크로스", player.advancedAbilities.crossing],
+        ["중거리 슛", player.advancedAbilities.longShots],
+        ["세트피스", player.advancedAbilities.setPieces],
+      ],
+    },
+    {
+      label: "움직임 · 전술",
+      values: [
+        ["가속", player.advancedAbilities.acceleration],
+        ["스태미나", player.advancedAbilities.stamina],
+        ["위치 선정", player.advancedAbilities.positioning],
+        ["판단력", player.advancedAbilities.decisions],
+        ["압박", player.advancedAbilities.pressing],
+        ["수비 인식", player.advancedAbilities.defensiveAwareness],
+        ["오프 더 볼", player.advancedAbilities.offBall],
+        ["전술 적응", player.advancedAbilities.tacticalAdaptability],
+      ],
+    },
+    {
+      label: "피지컬 · 멘탈",
+      values: [
+        ["힘", player.advancedAbilities.strength],
+        ["제공권", player.advancedAbilities.aerial],
+        ["침착성", player.advancedAbilities.composure],
+        ["적극성", player.advancedAbilities.aggression],
+        ["리더십", player.advancedAbilities.leadership],
+        ["꾸준함", player.advancedAbilities.consistency],
+        ["회복력", player.advancedAbilities.recovery],
+        ["부상 위험", player.advancedAbilities.injuryRisk],
+      ],
+    },
+  ];
+  return (
+    <div className="player-dialog-backdrop" onMouseDown={onClose}>
+      <section
+        className="player-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-label={`${player.name} 선수 상세`}
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <header>
+          <div className="player-dialog-number">{player.number}</div>
+          <div>
+            <span>{player.club}</span>
+            <h2>
+              {player.name} <b className="player-overall">{player.coreAbilities.overall}</b>
+            </h2>
+            <p>
+              {player.position} · {player.detailedPosition} ·{" "}
+              {player.age}세 · {player.heightCm}cm · {footLabel[player.preferredFoot]}
+            </p>
+          </div>
+          <button type="button" onClick={onClose} aria-label="선수 상세 닫기">
+            ×
+          </button>
+        </header>
+        <div className="player-live-grid">
+          <div>
+            <span>현재 체력</span>
+            <strong>{Math.round(player.currentStamina)}</strong>
+          </div>
+          <div>
+            <span>추가 체력</span>
+            <strong className="bonus-value">
+              +{Math.round(player.bonusStamina)}
+            </strong>
+          </div>
+          <div>
+            <span>컨디션</span>
+            <strong>{Math.round(player.condition)}</strong>
+          </div>
+          <div>
+            <span>카드</span>
+            <strong>{player.card === "NONE" ? "없음" : player.card}</strong>
+          </div>
+        </div>
+        <div className="player-order-list">
+          <span>개인 지시</span>
+          {personalCommands.length ? (
+            personalCommands.map((command) => {
+              const evaluation = evaluateCommandImpact(match, command);
+              return (
+                <article key={command.id}>
+                  <div>
+                    <strong>{command.label}</strong>
+                    <small>{evaluation.status}</small>
+                  </div>
+                  <b>{evaluation.successRate}%</b>
+                </article>
+              );
+            })
+          ) : (
+            <p>현재 전달된 개인 지시가 없습니다.</p>
+          )}
+        </div>
+        <div className="player-abilities">
+          <div className="ability-heading">
+            <div>
+              <span>PLAYER ATTRIBUTES</span>
+              <strong>핵심 능력치</strong>
+            </div>
+            <small>게임 설계 추정치 · 신뢰도 {player.confidenceGrade}</small>
+          </div>
+          <div className="main-ability-grid">
+            {mainAbilities.map(([label, rawValue]) => {
+              const value = typeof rawValue === "number" ? rawValue : 0;
+              return (
+                <div key={label as string}>
+                  <span>{label}</span>
+                  <strong>{value || "-"}</strong>
+                  <i><b style={{ width: `${value}%` }} /></i>
+                </div>
+              );
+            })}
+          </div>
+          <button
+            className="advanced-toggle"
+            type="button"
+            aria-expanded={showAdvanced}
+            onClick={() => setShowAdvanced((current) => !current)}
+          >
+            {showAdvanced ? "세부 능력치 접기" : "세부 능력치 보기"}
+            <span>{showAdvanced ? "−" : "+"}</span>
+          </button>
+          {showAdvanced && (
+            <div className="advanced-ability-panel">
+              {advancedAbilityGroups.map((group) => {
+                const values = group.values.filter(
+                  (entry): entry is [string, number] => typeof entry[1] === "number",
+                );
+                return (
+                  <section key={group.label}>
+                    <h3>{group.label}</h3>
+                    <div>
+                      {values.map(([label, value]) => (
+                        <p key={label}>
+                          <span>{label}</span>
+                          <b>{value}</b>
+                        </p>
+                      ))}
+                    </div>
+                  </section>
+                );
+              })}
+              <div className="player-scout-note">
+                <p><span>강점</span>{player.strengths}</p>
+                <p><span>약점</span>{player.weakness}</p>
+                <p><span>평가 근거</span>{player.ratingBasis}</p>
+              </div>
+            </div>
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+const breakHeadline = (match: MatchState): string => {
+  const lowest = match.players
+    .filter((player) => player.side === "home" && player.onField)
+    .sort((a, b) => a.currentStamina - b.currentStamina)[0];
+  if (match.metrics.awayRightThreat >= 3)
+    return "상대의 오른쪽 측면 공략이 반복되고 있습니다.";
+  if (match.metrics.homeShots === 0)
+    return "점유에 비해 결정적인 침투가 부족합니다.";
+  if (lowest && lowest.currentStamina < 58)
+    return `${lowest.name}의 체력 저하가 가장 큰 위험입니다.`;
+  return "현재 흐름은 균형적입니다. 한 가지 우선순위를 선택하십시오.";
+};
+
 interface ObservationScreenProps {
   match: MatchState;
   selectedPlayerId?: string;
   memo: string;
-  playbackSpeed: 1 | 2;
+  playbackSpeed: 1 | 2 | 4;
+  isPaused: boolean;
   onSelectPlayer: (playerId: string) => void;
   onMemoChange: (memo: string) => void;
-  onPlaybackSpeedChange: (speed: 1 | 2) => void;
+  onPlaybackSpeedChange: (speed: 1 | 2 | 4) => void;
+  onPauseChange: (paused: boolean) => void;
+  onSubstitute: (outgoingPlayerId: string, incomingPlayerId: string) => void;
+  onSwitchSubTactic: (slot: "sub1" | "sub2") => void;
+  onSkipToDecision: () => void;
 }
 
 export function ObservationScreen({
@@ -33,10 +268,23 @@ export function ObservationScreen({
   selectedPlayerId,
   memo,
   playbackSpeed,
+  isPaused,
   onSelectPlayer,
   onMemoChange,
   onPlaybackSpeedChange,
+  onPauseChange,
+  onSubstitute,
+  onSwitchSubTactic,
+  onSkipToDecision,
 }: ObservationScreenProps) {
+  const [staffTab, setStaffTab] = useState<"feedback" | "commands">(
+    "feedback",
+  );
+  const [detailPlayerId, setDetailPlayerId] = useState<string>();
+  const [compareBasePlayerId, setCompareBasePlayerId] = useState<string>();
+  const [pauseTool, setPauseTool] = useState<"substitution" | "tactic">(
+    "substitution",
+  );
   const selectedPlayer = match.players.find(
     (player) => player.id === selectedPlayerId,
   );
@@ -78,6 +326,7 @@ export function ObservationScreen({
               className={playbackSpeed === 1 ? "is-active" : ""}
               aria-pressed={playbackSpeed === 1}
               onClick={() => onPlaybackSpeedChange(1)}
+              disabled={isPaused}
             >
               1×
             </button>
@@ -86,13 +335,37 @@ export function ObservationScreen({
               className={playbackSpeed === 2 ? "is-active" : ""}
               aria-pressed={playbackSpeed === 2}
               onClick={() => onPlaybackSpeedChange(2)}
+              disabled={isPaused}
             >
               2×
             </button>
+            <button
+              type="button"
+              className={playbackSpeed === 4 ? "is-active" : ""}
+              aria-pressed={playbackSpeed === 4}
+              onClick={() => onPlaybackSpeedChange(4)}
+              disabled={isPaused}
+            >
+              4×
+            </button>
           </div>
+          <button
+            type="button"
+            className={`pause-match-button ${isPaused ? "is-paused" : ""}`}
+            aria-pressed={isPaused}
+            onClick={() => onPauseChange(!isPaused)}
+          >
+            {isPaused ? "경기 재개" : "경기 중지"}
+          </button>
           <div className="observation-lock">
-            <span>관찰 구간</span>
-            <strong>전술 변경 잠금</strong>
+            <button
+              type="button"
+              className="skip-segment-button"
+              onClick={onSkipToDecision}
+              disabled={isPaused}
+            >
+              다음 결정까지 스킵
+            </button>
           </div>
         </div>
       </header>
@@ -126,22 +399,61 @@ export function ObservationScreen({
             <div className="panel-title-row tight">
               <div>
                 <span>STAFF ROOM</span>
-                <h2>코치 피드백</h2>
+                <h2>{staffTab === "feedback" ? "코치 피드백" : "지시 추적"}</h2>
+              </div>
+              <div className="staff-tabs">
+                <button
+                  className={staffTab === "feedback" ? "is-active" : ""}
+                  onClick={() => setStaffTab("feedback")}
+                >
+                  코치
+                </button>
+                <button
+                  className={staffTab === "commands" ? "is-active" : ""}
+                  onClick={() => setStaffTab("commands")}
+                >
+                  지시 {match.commands.length}
+                </button>
               </div>
             </div>
-            <div className="coach-list">
-              {match.feedback.slice(0, 4).map((feedback) => (
-                <article key={feedback.id} className="coach-row">
-                  <span className={`severity severity-${feedback.severity}`}>
-                    {feedback.severity}
-                  </span>
-                  <div>
-                    <strong>{feedback.coach} 코치</strong>
-                    <p>{feedback.text}</p>
-                  </div>
-                </article>
-              ))}
-            </div>
+            {staffTab === "feedback" ? (
+              <div className="coach-list">
+                {match.feedback.slice(0, 4).map((feedback) => (
+                  <article key={feedback.id} className="coach-row">
+                    <span className={`severity severity-${feedback.severity}`}>
+                      {feedback.severity}
+                    </span>
+                    <div>
+                      <strong>{feedback.coach} 코치</strong>
+                      <p>{feedback.text}</p>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <div className="command-tracker">
+                {match.commands.length ? (
+                  match.commands
+                    .slice()
+                    .reverse()
+                    .map((command) => {
+                      const evaluation = evaluateCommandImpact(match, command);
+                      return (
+                        <article key={command.id}>
+                          <div>
+                            <strong>{command.label}</strong>
+                            <small>{evaluation.status}</small>
+                          </div>
+                          <b>{evaluation.successRate}%</b>
+                          <p>{evaluation.headline}</p>
+                        </article>
+                      );
+                    })
+                ) : (
+                  <p className="muted">아직 전달한 지시가 없습니다.</p>
+                )}
+              </div>
+            )}
           </div>
         </aside>
 
@@ -182,9 +494,22 @@ export function ObservationScreen({
             selectedPlayerId={selectedPlayerId}
             onSelectPlayer={onSelectPlayer}
           />
+          {isPaused && (
+            <div className="match-paused-overlay" role="status">
+              <span>경기 중지</span>
+              <strong>시뮬레이션 시간이 멈췄습니다.</strong>
+              <small>오른쪽에서 선수를 즉시 교체하거나 경기를 재개하세요.</small>
+            </div>
+          )}
           <div className="board-legend">
             <span>
-              <i className="legend-player korea" /> 대한민국
+              <i
+                className="legend-player"
+                style={{
+                  background: match.homeTeam.color,
+                  borderColor: match.homeTeam.accent,
+                }}
+              /> 대한민국
             </span>
             <span>
               <i
@@ -199,7 +524,57 @@ export function ObservationScreen({
           </div>
         </section>
 
-        <aside className="match-right-column">
+        <aside className={`match-right-column ${isPaused ? "is-paused" : ""}`}>
+          {isPaused && (
+            <div className="match-panel pause-substitution-panel">
+              <div className="panel-title-row tight">
+                <div>
+                  <span>PAUSED · LIVE SUBSTITUTION</span>
+                  <h2>경기 중 선수 교체</h2>
+                </div>
+              </div>
+              <div className="pause-tools-tabs">
+                <button
+                  type="button"
+                  className={pauseTool === "substitution" ? "is-active" : ""}
+                  onClick={() => setPauseTool("substitution")}
+                >
+                  선수 교체
+                </button>
+                <button
+                  type="button"
+                  className={pauseTool === "tactic" ? "is-active" : ""}
+                  onClick={() => setPauseTool("tactic")}
+                >
+                  서브 전술
+                </button>
+              </div>
+              {pauseTool === "substitution" ? (
+                <TeamRosterPanel
+                  match={match}
+                  side="home"
+                  selectedPlayerId={selectedPlayerId}
+                  onSelectPlayer={onSelectPlayer}
+                  allowSubstitution
+                  substitutionMode="immediate"
+                  onSubstitute={onSubstitute}
+                  onComparePlayer={setCompareBasePlayerId}
+                />
+              ) : (
+                <SubTacticSwitcher
+                  match={match}
+                  onSwitch={onSwitchSubTactic}
+                />
+              )}
+              <button
+                type="button"
+                className="button button-primary button-wide"
+                onClick={() => onPauseChange(false)}
+              >
+                경기 재개
+              </button>
+            </div>
+          )}
           <div className="match-panel player-monitor">
             <div className="panel-title-row tight">
               <div>
@@ -225,8 +600,9 @@ export function ObservationScreen({
                     </span>
                     <span className="stamina-bar">
                       <i
+                        className="stamina-base"
                         style={{
-                          width: `${player.currentStamina}%`,
+                          width: `${Math.max(0, player.currentStamina - player.bonusStamina)}%`,
                           background:
                             player.currentStamina < 45
                               ? "#ef6b62"
@@ -235,6 +611,15 @@ export function ObservationScreen({
                                 : "#bfe855",
                         }}
                       />
+                      {player.bonusStamina > 0 && (
+                        <i
+                          className="stamina-bonus"
+                          style={{
+                            left: `${Math.max(0, player.currentStamina - player.bonusStamina)}%`,
+                            width: `${player.bonusStamina}%`,
+                          }}
+                        />
+                      )}
                     </span>
                     <b>{Math.round(player.currentStamina)}</b>
                     {player.card !== "NONE" && (
@@ -273,13 +658,37 @@ export function ObservationScreen({
               <div>
                 <strong>{selectedPlayer.name}</strong>
                 <small>
-                  전술 이해 {selectedPlayer.attributes.tacticalUnderstanding}
+                  {selectedPlayer.detailedPosition} · 체력{" "}
+                  {Math.round(selectedPlayer.currentStamina)}
                 </small>
               </div>
+              <button
+                type="button"
+                onClick={() => setDetailPlayerId(selectedPlayer.id)}
+              >
+                자세히
+              </button>
             </div>
           )}
         </aside>
       </section>
+      {detailPlayerId && (
+        <PlayerDetailDialog
+          player={
+            match.players.find((player) => player.id === detailPlayerId) ??
+            match.players[0]
+          }
+          match={match}
+          onClose={() => setDetailPlayerId(undefined)}
+        />
+      )}
+      {compareBasePlayerId && (
+        <PlayerComparisonDialog
+          match={match}
+          basePlayerId={compareBasePlayerId}
+          onClose={() => setCompareBasePlayerId(undefined)}
+        />
+      )}
     </main>
   );
 }
@@ -293,6 +702,12 @@ interface HydrationScreenProps {
     cost: number,
     randomState: number,
   ) => void;
+  onQueueSubstitution: (
+    outgoingPlayerId: string,
+    incomingPlayerId: string,
+  ) => void;
+  onCancelSubstitution: (pendingId: string) => void;
+  onSwitchSubTactic: (slot: "sub1" | "sub2") => void;
   onComplete: () => void;
 }
 
@@ -300,23 +715,48 @@ export function HydrationScreen({
   match,
   memo,
   onApplyCommand,
+  onQueueSubstitution,
+  onCancelSubstitution,
+  onSwitchSubTactic,
   onComplete,
 }: HydrationScreenProps) {
   const [selectedPlayerId, setSelectedPlayerId] = useState<string>();
+  const [detailPlayerId, setDetailPlayerId] = useState<string>();
   const [selectedCommand, setSelectedCommand] = useState<CommandKind>();
-  const [deductions, setDeductions] = useState(0);
+  const [breakTool, setBreakTool] = useState<
+    "commands" | "roster" | "tactics"
+  >(
+    "commands",
+  );
+  const [rosterSide, setRosterSide] = useState<"home" | "away">("home");
+  const [rosterPlayerId, setRosterPlayerId] = useState<string>();
+  const [compareBasePlayerId, setCompareBasePlayerId] = useState<string>();
+  const [spentCommandSeconds, setSpentCommandSeconds] = useState(0);
   const [now, setNow] = useState(() => performance.now());
+  const [briefingEndsAt] = useState(() => performance.now() + 3000);
+  const [pendingDelivery, setPendingDelivery] = useState<{
+    id: string;
+    kind: CommandKind;
+    targetPlayerId?: string;
+    cost: number;
+    randomState: number;
+    startedAt: number;
+  }>();
   const [message, setMessage] = useState(
     "메모와 코치 피드백을 확인하고 중요한 지시부터 선택하십시오.",
   );
-  const [startedAt] = useState(() => performance.now());
+  const [startedAt] = useState(briefingEndsAt);
   const completeOnce = useRef(false);
+  const completedDeliveryIds = useRef(new Set<string>());
 
-  const remaining = calculateBreakRemaining(
-    startedAt,
-    now,
-    deductions,
+  const briefingRemaining = Math.max(
+    0,
+    Math.ceil((briefingEndsAt - now) / 1000),
   );
+  const briefingReady = now >= briefingEndsAt;
+  const remaining = briefingReady
+    ? calculateBreakRemaining(startedAt, now, spentCommandSeconds)
+    : 180;
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(performance.now()), 120);
@@ -324,12 +764,12 @@ export function HydrationScreen({
   }, []);
 
   useEffect(() => {
-    if (remaining <= 0 && !completeOnce.current) {
+    if (briefingReady && remaining <= 0 && !completeOnce.current) {
       completeOnce.current = true;
       const timeout = window.setTimeout(onComplete, 650);
       return () => window.clearTimeout(timeout);
     }
-  }, [remaining, onComplete]);
+  }, [briefingReady, remaining, onComplete]);
 
   const selectedPlayer = match.players.find(
     (player) => player.id === selectedPlayerId,
@@ -348,6 +788,56 @@ export function HydrationScreen({
   const averageTrust =
     homePlayers.reduce((total, player) => total + player.managerTrust, 0) /
     homePlayers.length;
+  const selectedCost =
+    definition && (!definition.needsPlayer || selectedPlayer)
+      ? calculateCommandCost(definition, {
+          player: definition.needsPlayer ? selectedPlayer : undefined,
+          averageUnderstanding,
+          averageTrust,
+          prepared: definition.kind === "PREPARED_PLAN",
+          randomState: match.randomState + match.commands.length * 97,
+        })
+      : undefined;
+  const deliveryElapsed = pendingDelivery
+    ? Math.max(0, now - pendingDelivery.startedAt)
+    : 0;
+  const deliveryProgress = pendingDelivery
+    ? Math.min(100, (deliveryElapsed / DELIVERY_ANIMATION_MS) * 100)
+    : 0;
+
+  useEffect(() => {
+    if (
+      !pendingDelivery ||
+      deliveryProgress < 100 ||
+      completedDeliveryIds.current.has(pendingDelivery.id)
+    ) {
+      return;
+    }
+    completedDeliveryIds.current.add(pendingDelivery.id);
+    setSpentCommandSeconds(
+      (current) => current + pendingDelivery.cost,
+    );
+    onApplyCommand(
+      pendingDelivery.kind,
+      pendingDelivery.targetPlayerId,
+      pendingDelivery.cost,
+      pendingDelivery.randomState,
+    );
+    const deliveredDefinition = COMMANDS[pendingDelivery.kind];
+    const target = match.players.find(
+      (player) => player.id === pendingDelivery.targetPlayerId,
+    );
+    setMessage(
+      `${target ? `${target.name}에게 ` : ""}${deliveredDefinition.label} 전달 완료 · ${pendingDelivery.cost}초 소요`,
+    );
+    setPendingDelivery(undefined);
+    setSelectedCommand(undefined);
+  }, [
+    deliveryProgress,
+    match.players,
+    onApplyCommand,
+    pendingDelivery,
+  ]);
 
   const commitCommand = () => {
     if (!definition) {
@@ -358,13 +848,9 @@ export function HydrationScreen({
       setMessage("이 지시를 전달할 선수를 전술판에서 선택하십시오.");
       return;
     }
-    const result = calculateCommandCost(definition, {
-      player: selectedPlayer,
-      averageUnderstanding,
-      averageTrust,
-      prepared: definition.kind === "PREPARED_PLAN",
-      randomState: match.randomState + match.commands.length * 97,
-    });
+    if (!briefingReady || pendingDelivery) return;
+    const result = selectedCost;
+    if (!result) return;
     if (result.cost > remaining) {
       setMessage(
         `전달 시간이 부족합니다. 최소 ${definition.minCost}초 이상 확보해야 합니다.`,
@@ -372,17 +858,30 @@ export function HydrationScreen({
       return;
     }
 
-    setDeductions((current) => current + result.cost);
-    onApplyCommand(
-      definition.kind,
-      selectedPlayer?.id,
-      result.cost,
-      result.randomState,
-    );
+    setPendingDelivery({
+      id: `${definition.kind}-${now}`,
+      kind: definition.kind,
+      targetPlayerId: definition.needsPlayer ? selectedPlayer?.id : undefined,
+      cost: result.cost,
+      randomState: result.randomState,
+      startedAt: now,
+    });
     setMessage(
-      `${selectedPlayer ? `${selectedPlayer.name}에게 ` : ""}${definition.label} 전달 완료 · ${result.cost}초 차감`,
+      `${definition.needsPlayer && selectedPlayer ? `${selectedPlayer.name}에게 ` : ""}${definition.label} 전달 중 · ${result.cost}초 필요`,
     );
-    setSelectedCommand(undefined);
+  };
+
+  const switchBreakTactic = (slot: "sub1" | "sub2") => {
+    const cost = slot === "sub1" ? 18 : 32;
+    if (!briefingReady || pendingDelivery || remaining < cost) {
+      setMessage(`전술 전환에 필요한 ${cost}초가 부족합니다.`);
+      return;
+    }
+    setSpentCommandSeconds((current) => current + cost);
+    onSwitchSubTactic(slot);
+    setMessage(
+      `${slot === "sub1" ? "서브 전술 1" : "서브 전술 2"} 전환 완료 · ${cost}초 소요`,
+    );
   };
 
   return (
@@ -415,6 +914,32 @@ export function HydrationScreen({
       <section className="break-layout">
         <aside className="break-context">
           <div className="break-section">
+            <div className="situation-summary">
+              <span>구간 요약</span>
+              <strong>{breakHeadline(match)}</strong>
+              <div>
+                <p>
+                  슈팅 <b>{match.metrics.homeShots}</b> :{" "}
+                  <b>{match.metrics.awayShots}</b>
+                </p>
+                <p>
+                  패스{" "}
+                  <b>
+                    {match.metrics.homePassAttempts
+                      ? Math.round(
+                          (match.metrics.homePassSuccess /
+                            match.metrics.homePassAttempts) *
+                            100,
+                        )
+                      : 0}
+                    %
+                  </b>
+                </p>
+                <p>
+                  평균 체력 <b>{Math.round(averageTeamStamina(match))}</b>
+                </p>
+              </div>
+            </div>
             <div className="panel-title-row tight">
               <div>
                 <span>YOUR NOTES</span>
@@ -423,7 +948,9 @@ export function HydrationScreen({
             </div>
             <div className="memo-paper">
               {memo ? (
-                memo.split("\n").map((line) => <p key={line}>{line}</p>)
+                memo
+                  .split("\n")
+                  .map((line, index) => <p key={`${index}-${line}`}>{line}</p>)
               ) : (
                 <p className="muted">작성한 메모가 없습니다.</p>
               )}
@@ -468,6 +995,12 @@ export function HydrationScreen({
               <div className="selected-target">
                 <span>{selectedPlayer.number}</span>
                 <strong>{selectedPlayer.name}</strong>
+                <button
+                  type="button"
+                  onClick={() => setDetailPlayerId(selectedPlayer.id)}
+                >
+                  자세히
+                </button>
               </div>
             )}
           </div>
@@ -491,27 +1024,53 @@ export function HydrationScreen({
           </div>
         </section>
 
-        <aside className="command-panel">
-          <div className="panel-title-row">
-            <div>
-              <span>DELIVER MESSAGE</span>
-              <h2>행동 선택</h2>
-            </div>
+        <aside className={`command-panel ${breakTool !== "commands" ? "is-roster-mode" : ""}`}>
+          <div className="break-tools-tabs">
+            <button
+              type="button"
+              className={breakTool === "commands" ? "is-active" : ""}
+              onClick={() => setBreakTool("commands")}
+            >
+              전술 지시
+            </button>
+            <button
+              type="button"
+              className={breakTool === "roster" ? "is-active" : ""}
+              onClick={() => setBreakTool("roster")}
+            >
+              선수·교체
+            </button>
+            <button
+              type="button"
+              className={breakTool === "tactics" ? "is-active" : ""}
+              onClick={() => setBreakTool("tactics")}
+            >
+              서브 전술
+            </button>
           </div>
-          <div className="command-list">
-            {(Object.keys(COMMANDS) as CommandKind[]).map((kind) => {
+          {breakTool === "commands" ? (
+            <>
+              <div className="panel-title-row">
+                <div>
+                  <span>DELIVER MESSAGE</span>
+                  <h2>행동 선택</h2>
+                </div>
+              </div>
+              <div className="command-list">
+            {BREAK_COMMAND_KINDS.map((kind) => {
               const command = COMMANDS[kind];
               const unavailable = remaining < command.minCost;
               return (
                 <button
                   key={kind}
-                  disabled={unavailable}
+                  disabled={unavailable || Boolean(pendingDelivery)}
                   className={selectedCommand === kind ? "is-selected" : ""}
                   onClick={() => setSelectedCommand(kind)}
                 >
                   <span>
                     <small>{command.category}</small>
                     <strong>{command.label}</strong>
+                    <em>{command.effect}</em>
                   </span>
                   <b>
                     {command.minCost}~{command.maxCost}초
@@ -519,8 +1078,8 @@ export function HydrationScreen({
                 </button>
               );
             })}
-          </div>
-          <div className="command-confirm">
+              </div>
+              <div className="command-confirm">
             {definition ? (
               <>
                 <span>선택한 지시</span>
@@ -530,6 +1089,30 @@ export function HydrationScreen({
                   <small>효과 · {definition.effect}</small>
                   <small>대가 · {definition.tradeoff}</small>
                 </div>
+                {definition.needsPlayer && (
+                  <label className="command-target-select">
+                    <span>대상 선수</span>
+                    <select
+                      value={selectedPlayerId ?? ""}
+                      onChange={(event) =>
+                        setSelectedPlayerId(event.target.value || undefined)
+                      }
+                      disabled={Boolean(pendingDelivery)}
+                    >
+                      <option value="">선수를 선택하세요</option>
+                      {homePlayers.map((player) => (
+                        <option key={player.id} value={player.id}>
+                          {player.number}. {player.name} · {player.detailedPosition}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+                {selectedCost && (
+                  <div className="estimated-cost">
+                    예상 전달 시간 <b>{selectedCost.cost}초</b>
+                  </div>
+                )}
               </>
             ) : (
               <p className="muted">목록에서 전달할 행동을 선택하십시오.</p>
@@ -537,21 +1120,120 @@ export function HydrationScreen({
             <button
               className="button button-primary button-wide"
               onClick={commitCommand}
-              disabled={!definition}
+              disabled={
+                !definition ||
+                !briefingReady ||
+                Boolean(pendingDelivery) ||
+                (definition.needsPlayer && !selectedPlayer)
+              }
             >
-              전달하기
-              {definition && (
+              {pendingDelivery ? "전달 중" : "전달하기"}
+              {selectedCost && !pendingDelivery && (
                 <span>
-                  -{definition.minCost}~{definition.maxCost}초
+                  {selectedCost.cost}초 소요
                 </span>
               )}
             </button>
+            {pendingDelivery && (
+              <div className="delivery-progress" aria-live="polite">
+                <i style={{ width: `${deliveryProgress}%` }} />
+                <span>
+                  {COMMANDS[pendingDelivery.kind].label}{" "}
+                  {Math.round(deliveryProgress)}%
+                </span>
+              </div>
+            )}
             <p className="command-message" role="status">
               {message}
             </p>
-          </div>
+              </div>
+            </>
+          ) : breakTool === "roster" ? (
+            <div className="break-roster-tools">
+              <div className="panel-title-row tight">
+                <div>
+                  <span>PLAYER DATABASE · SUBSTITUTION</span>
+                  <h2>선수 정보와 교체 예약</h2>
+                </div>
+              </div>
+              <div className="prematch-team-toggle">
+                <button
+                  type="button"
+                  className={rosterSide === "home" ? "is-active" : ""}
+                  onClick={() => {
+                    setRosterSide("home");
+                    setRosterPlayerId(undefined);
+                  }}
+                >
+                  우리 팀
+                </button>
+                <button
+                  type="button"
+                  className={rosterSide === "away" ? "is-active" : ""}
+                  onClick={() => {
+                    setRosterSide("away");
+                    setRosterPlayerId(undefined);
+                  }}
+                >
+                  상대 보기
+                </button>
+              </div>
+              <TeamRosterPanel
+                key={rosterSide}
+                match={match}
+                side={rosterSide}
+                selectedPlayerId={rosterPlayerId}
+                onSelectPlayer={setRosterPlayerId}
+                allowSubstitution={rosterSide === "home"}
+                substitutionMode="queue"
+                onSubstitute={onQueueSubstitution}
+                onCancelSubstitution={onCancelSubstitution}
+                onComparePlayer={setCompareBasePlayerId}
+              />
+            </div>
+          ) : (
+            <SubTacticSwitcher
+              match={match}
+              costType="seconds"
+              disabled={!briefingReady || Boolean(pendingDelivery)}
+              availableBudget={remaining}
+              onSwitch={switchBreakTactic}
+            />
+          )}
         </aside>
       </section>
+      {!briefingReady && (
+        <div className="break-intro" aria-live="assertive">
+          <div>
+            <span>AUTO BREAK · SITUATION SCAN</span>
+            <strong>{breakHeadline(match)}</strong>
+            <p>
+              슈팅 {match.metrics.homeShots}:{match.metrics.awayShots} · 평균
+              체력 {Math.round(averageTeamStamina(match))} · 상대 측면 위협{" "}
+              {match.metrics.awayRightThreat}
+            </p>
+            <b>{briefingRemaining}</b>
+            <small>카운트가 끝나면 180초가 흐르기 시작합니다.</small>
+          </div>
+        </div>
+      )}
+      {detailPlayerId && (
+        <PlayerDetailDialog
+          player={
+            match.players.find((player) => player.id === detailPlayerId) ??
+            match.players[0]
+          }
+          match={match}
+          onClose={() => setDetailPlayerId(undefined)}
+        />
+      )}
+      {compareBasePlayerId && (
+        <PlayerComparisonDialog
+          match={match}
+          basePlayerId={compareBasePlayerId}
+          onClose={() => setCompareBasePlayerId(undefined)}
+        />
+      )}
     </main>
   );
 }
@@ -564,6 +1246,12 @@ interface HalfTimeScreenProps {
     cost?: number,
   ) => void;
   onRecovery: () => void;
+  onQueueSubstitution: (
+    outgoingPlayerId: string,
+    incomingPlayerId: string,
+  ) => void;
+  onCancelSubstitution: (pendingId: string) => void;
+  onSwitchSubTactic: (slot: "sub1" | "sub2") => void;
   onContinue: () => void;
 }
 
@@ -571,10 +1259,21 @@ export function HalfTimeScreen({
   match,
   onApplyCommand,
   onRecovery,
+  onQueueSubstitution,
+  onCancelSubstitution,
+  onSwitchSubTactic,
   onContinue,
 }: HalfTimeScreenProps) {
   const [remainingAp, setRemainingAp] = useState(10);
   const [usedActions, setUsedActions] = useState<string[]>([]);
+  const [halftimeView, setHalftimeView] = useState<
+    "actions" | "players" | "tactics"
+  >(
+    "actions",
+  );
+  const [rosterSide, setRosterSide] = useState<"home" | "away">("home");
+  const [rosterPlayerId, setRosterPlayerId] = useState<string>();
+  const [compareBasePlayerId, setCompareBasePlayerId] = useState<string>();
   const forward = useMemo(
     () =>
       match.players.find(
@@ -586,13 +1285,6 @@ export function HalfTimeScreen({
     [match.players],
   );
   const actions = [
-    {
-      id: "prepared",
-      label: "준비된 예비 전술",
-      detail: "측면 전환 플랜 적용",
-      cost: 3,
-      run: () => onApplyCommand("PREPARED_PLAN", undefined, 0),
-    },
     {
       id: "adjust",
       label: "기존 전술 미세 조정",
@@ -630,6 +1322,13 @@ export function HalfTimeScreen({
     setUsedActions((current) => [...current, action.id]);
   };
 
+  const switchHalfTimeTactic = (slot: "sub1" | "sub2") => {
+    const cost = slot === "sub1" ? 2 : 4;
+    if (remainingAp < cost) return;
+    onSwitchSubTactic(slot);
+    setRemainingAp((current) => current - cost);
+  };
+
   return (
     <main className="halftime-shell">
       <header className="halftime-header">
@@ -657,7 +1356,18 @@ export function HalfTimeScreen({
               <strong>{match.awayTeam.shortName}</strong>
             </div>
           </div>
-          <TacticalBoard match={match} compact />
+          <TacticalBoard
+            match={match}
+            compact
+            selectedPlayerId={
+              halftimeView === "players" ? rosterPlayerId : undefined
+            }
+            selectableSide={rosterSide}
+            focusSide={halftimeView === "players" ? rosterSide : undefined}
+            onSelectPlayer={
+              halftimeView === "players" ? setRosterPlayerId : undefined
+            }
+          />
           <div className="halftime-metrics">
             <div>
               <span>패스 성공</span>
@@ -684,29 +1394,100 @@ export function HalfTimeScreen({
         </div>
 
         <div className="halftime-actions">
-          <div className="panel-title-row">
-            <div>
-              <span>ALLOCATE ACTION POINTS</span>
-              <h2>무엇에 시간을 더 쓸 것인가</h2>
-            </div>
+          <div className="halftime-view-tabs">
+            <button
+              type="button"
+              className={halftimeView === "actions" ? "is-active" : ""}
+              onClick={() => setHalftimeView("actions")}
+            >
+              전술 조정
+            </button>
+            <button
+              type="button"
+              className={halftimeView === "players" ? "is-active" : ""}
+              onClick={() => setHalftimeView("players")}
+            >
+              선수 정보
+            </button>
+            <button
+              type="button"
+              className={halftimeView === "tactics" ? "is-active" : ""}
+              onClick={() => setHalftimeView("tactics")}
+            >
+              서브 전술
+            </button>
           </div>
-          <div className="ap-action-grid">
-            {actions.map((action) => {
-              const used = usedActions.includes(action.id);
-              return (
+          {halftimeView === "actions" ? (
+            <>
+              <div className="panel-title-row">
+                <div>
+                  <span>ALLOCATE ACTION POINTS</span>
+                  <h2>무엇에 시간을 더 쓸 것인가</h2>
+                </div>
+              </div>
+              <div className="ap-action-grid">
+                {actions.map((action) => {
+                  const used = usedActions.includes(action.id);
+                  return (
+                    <button
+                      key={action.id}
+                      disabled={remainingAp < action.cost || used}
+                      className={used ? "is-used" : ""}
+                      onClick={() => handleAction(action)}
+                    >
+                      <span>{used ? "적용 완료" : `${action.cost} AP`}</span>
+                      <strong>{action.label}</strong>
+                      <p>{action.detail}</p>
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          ) : halftimeView === "players" ? (
+            <div className="halftime-roster-view">
+              <div className="prematch-team-toggle">
                 <button
-                  key={action.id}
-                  disabled={remainingAp < action.cost || used}
-                  className={used ? "is-used" : ""}
-                  onClick={() => handleAction(action)}
+                  type="button"
+                  className={rosterSide === "home" ? "is-active" : ""}
+                  onClick={() => {
+                    setRosterSide("home");
+                    setRosterPlayerId(undefined);
+                  }}
                 >
-                  <span>{used ? "적용 완료" : `${action.cost} AP`}</span>
-                  <strong>{action.label}</strong>
-                  <p>{action.detail}</p>
+                  우리 팀
                 </button>
-              );
-            })}
-          </div>
+                <button
+                  type="button"
+                  className={rosterSide === "away" ? "is-active" : ""}
+                  onClick={() => {
+                    setRosterSide("away");
+                    setRosterPlayerId(undefined);
+                  }}
+                >
+                  상대 보기
+                </button>
+              </div>
+              <TeamRosterPanel
+                key={rosterSide}
+                match={match}
+                side={rosterSide}
+                selectedPlayerId={rosterPlayerId}
+                onSelectPlayer={setRosterPlayerId}
+                allowSubstitution={rosterSide === "home"}
+                substitutionMode="queue"
+                onSubstitute={onQueueSubstitution}
+                onCancelSubstitution={onCancelSubstitution}
+                onComparePlayer={setCompareBasePlayerId}
+              />
+            </div>
+          ) : (
+            <SubTacticSwitcher
+              match={match}
+              costType="ap"
+              availableBudget={remainingAp}
+              onSwitch={switchHalfTimeTactic}
+            />
+          )}
           <button
             className="button button-primary button-wide"
             onClick={onContinue}
@@ -716,6 +1497,13 @@ export function HalfTimeScreen({
           </button>
         </div>
       </section>
+      {compareBasePlayerId && (
+        <PlayerComparisonDialog
+          match={match}
+          basePlayerId={compareBasePlayerId}
+          onClose={() => setCompareBasePlayerId(undefined)}
+        />
+      )}
     </main>
   );
 }

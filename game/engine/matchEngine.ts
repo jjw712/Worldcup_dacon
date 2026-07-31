@@ -1,6 +1,9 @@
 import { FORMATION_433, TEAMS } from "../data";
+import { GROUP_A_EXPECTED_XI_2026 } from "../rosters2026";
+import { DEFAULT_TACTIC_LOADOUT, tacticPresetById } from "../tactics";
 import type {
   CampaignState,
+  CarryPlayerState,
   CoachFeedback,
   MatchDefinition,
   MatchEvent,
@@ -9,13 +12,19 @@ import type {
   MatchPlayer,
   MatchResult,
   MatchState,
-  PlayerAttributes,
-  Position,
+  PendingSubstitution,
   RosterPlayer,
   Side,
   TacticState,
+  TacticLoadout,
+  TacticPresetId,
 } from "../types";
 import { clamp, nextRandom, randomBetween } from "./random";
+import {
+  COMMANDS,
+  createCommandBaseline,
+  evaluateCommandImpact,
+} from "./commands";
 
 const OBSERVATION_SECONDS = 60;
 
@@ -42,24 +51,72 @@ const emptyMetrics = (): MatchMetrics => ({
   tacticalWins: 0,
 });
 
-/**
- * Temporary neutral simulation values. They are deliberately not stored in
- * the official roster dataset and can be replaced when the ability model lands.
- */
-const simulationAttributesFor = (
-  position: Position,
-  shirtNumber: number,
-): PlayerAttributes => {
-  const variance = ((shirtNumber * 7) % 7) - 3;
-  return {
-    passing: 72 + variance + (position === "MF" ? 4 : 0),
-    shooting: 65 + variance + (position === "FW" ? 8 : 0),
-    defending: 64 + variance + (position === "DF" ? 10 : 0),
-    pace: 72 + variance + (position === "FW" ? 3 : 0),
-    stamina: 75 + variance,
-    tacticalUnderstanding: 74 + variance,
-    roleFamiliarity: 76 + variance,
-  };
+const SLOT_COORDINATES: Record<string, { x: number; y: number }> = {
+  GK: { x: 0.08, y: 0.5 },
+  RB: { x: 0.23, y: 0.84 },
+  RCB: { x: 0.19, y: 0.64 },
+  CB: { x: 0.17, y: 0.5 },
+  LCB: { x: 0.19, y: 0.36 },
+  LB: { x: 0.23, y: 0.16 },
+  RWB: { x: 0.31, y: 0.84 },
+  LWB: { x: 0.31, y: 0.16 },
+  DM: { x: 0.38, y: 0.5 },
+  RDM: { x: 0.38, y: 0.64 },
+  LDM: { x: 0.38, y: 0.36 },
+  RCM: { x: 0.42, y: 0.64 },
+  CM: { x: 0.4, y: 0.5 },
+  LCM: { x: 0.42, y: 0.36 },
+  RM: { x: 0.48, y: 0.78 },
+  LM: { x: 0.48, y: 0.22 },
+  RW: { x: 0.65, y: 0.82 },
+  RAM: { x: 0.57, y: 0.66 },
+  AM: { x: 0.57, y: 0.5 },
+  LAM: { x: 0.57, y: 0.34 },
+  LW: { x: 0.65, y: 0.18 },
+  SS: { x: 0.62, y: 0.5 },
+  ST: { x: 0.71, y: 0.5 },
+};
+
+const OPPONENT_FORMATION_VARIANTS = {
+  CZE: ["3-4-2-1", "4-2-3-1"],
+  MEX: ["4-3-3", "4-2-3-1"],
+  RSA: ["4-2-3-1", "4-3-2-1"],
+} as const;
+
+const opponentFormationFor = (
+  teamId: Exclude<keyof typeof GROUP_A_EXPECTED_XI_2026, "KOR">,
+  seed: number,
+): string => {
+  const variants = OPPONENT_FORMATION_VARIANTS[teamId];
+  const random = nextRandom(seed);
+  return variants[Math.floor(random.value * variants.length)] ?? variants[0];
+};
+
+const coordinatesForFormation = (
+  slotName: string | undefined,
+  slotIndex: number,
+  formationName?: string,
+): { x: number; y: number } => {
+  const base = SLOT_COORDINATES[slotName ?? ""] ?? FORMATION_433[slotIndex];
+  if (!slotName || !formationName) return base;
+
+  if (formationName === "4-3-2-1") {
+    if (slotName === "RW" || slotName === "RAM") return { x: 0.58, y: 0.65 };
+    if (slotName === "LW" || slotName === "LAM") return { x: 0.58, y: 0.35 };
+    if (slotName === "AM") return { x: 0.46, y: 0.5 };
+  }
+
+  if (formationName === "4-2-3-1") {
+    if (slotName === "RWB") return { x: 0.23, y: 0.84 };
+    if (slotName === "LWB") return { x: 0.23, y: 0.16 };
+    if (slotName === "RCM" || slotName === "RDM") return { x: 0.38, y: 0.63 };
+    if (slotName === "DM" || slotName === "LDM") return { x: 0.38, y: 0.37 };
+    if (slotName === "LCM" || slotName === "AM") return { x: 0.55, y: 0.5 };
+    if (slotName === "RW") return { x: 0.58, y: 0.82 };
+    if (slotName === "LW") return { x: 0.58, y: 0.18 };
+  }
+
+  return base;
 };
 
 const createMatchPlayer = (
@@ -67,8 +124,10 @@ const createMatchPlayer = (
   side: Side,
   slotIndex: number,
   campaign?: CampaignState,
+  slotName?: string,
+  formationName?: string,
 ): MatchPlayer => {
-  const slot = FORMATION_433[slotIndex];
+  const slot = coordinatesForFormation(slotName, slotIndex, formationName);
   const homeX = slot.x;
   const x = side === "home" ? homeX : 1 - homeX;
   const carry =
@@ -77,7 +136,7 @@ const createMatchPlayer = (
   return {
     ...profile,
     number: profile.shirtNumber,
-    attributes: simulationAttributesFor(profile.position, profile.shirtNumber),
+    attributes: profile.gameAttributes,
     side,
     x,
     y: slot.y,
@@ -86,51 +145,153 @@ const createMatchPlayer = (
     targetX: x,
     targetY: slot.y,
     currentStamina: carry?.stamina ?? 100,
+    bonusStamina: 0,
     condition: carry?.condition ?? 92,
     managerTrust: carry?.managerTrust ?? 72,
     card: "NONE",
-    injuryRisk: carry?.injuryMatchesRemaining ? 0.2 : 0.04,
+    injuryRisk: carry?.injuryMatchesRemaining
+      ? 0.2
+      : (profile.advancedAbilities.injuryRisk ?? 20) / 500,
     injured: false,
     onField: true,
   };
 };
 
-const selectFormationPlayers = (players: RosterPlayer[]): RosterPlayer[] => {
-  const remaining = [...players];
-  return FORMATION_433.map((slot) => {
-    const index = remaining.findIndex(
-      (player) => player.position === slot.position,
-    );
-    const selectedIndex = index >= 0 ? index : 0;
-    return remaining.splice(selectedIndex, 1)[0];
-  }).filter((player): player is RosterPlayer => Boolean(player));
-};
+const selectExpectedLineup = (
+  teamId: keyof typeof GROUP_A_EXPECTED_XI_2026,
+  roster: RosterPlayer[],
+  campaign?: CampaignState,
+  variationSeed?: number,
+): Array<{ player: RosterPlayer; slot: string }> => {
+  const lineup = GROUP_A_EXPECTED_XI_2026[teamId];
+  const used = new Set<string>();
 
-const availableKoreaPlayers = (campaign: CampaignState): RosterPlayer[] => {
-  const available = TEAMS.KOR.roster.filter((player) => {
-    const carry = campaign.playerCarry[player.id];
-    return (
-      !carry ||
-      (carry.suspendedMatches <= 0 && carry.injuryMatchesRemaining <= 0)
-    );
+  const selectedLineup = lineup.map(({ player_id: playerId, slot }) => {
+    const expected = roster.find((player) => player.id === playerId);
+    const expectedUnavailable =
+      teamId === "KOR" &&
+      expected &&
+      campaign?.playerCarry[expected.id] &&
+      (campaign.playerCarry[expected.id].suspendedMatches > 0 ||
+        campaign.playerCarry[expected.id].injuryMatchesRemaining > 0);
+    const replacement = roster.find((player) => {
+      const carry = campaign?.playerCarry[player.id];
+      return (
+        !used.has(player.id) &&
+        player.position === expected?.position &&
+        (!carry ||
+          (carry.suspendedMatches <= 0 && carry.injuryMatchesRemaining <= 0))
+      );
+    });
+    const selected =
+      (!expectedUnavailable && expected && !used.has(expected.id)
+        ? expected
+        : replacement) ?? roster.find((player) => !used.has(player.id));
+
+    if (!selected) {
+      throw new Error(`${teamId}의 선발 명단을 구성할 수 없습니다.`);
+    }
+    used.add(selected.id);
+    return { player: selected, slot };
   });
-  const unavailable = TEAMS.KOR.roster.filter(
-    (player) => !available.some((candidate) => candidate.id === player.id),
-  );
-  return selectFormationPlayers([...available, ...unavailable]);
+
+  if (teamId === "KOR" || variationSeed === undefined) {
+    return selectedLineup;
+  }
+
+  let randomState = variationSeed >>> 0;
+  let random = nextRandom(randomState);
+  randomState = random.state;
+  const changes = random.value < 0.68 ? 1 : 2;
+  const changedSlots = new Set<number>();
+
+  for (let change = 0; change < changes; change += 1) {
+    const eligible = selectedLineup
+      .map((entry, index) => ({ entry, index }))
+      .filter(
+        ({ entry, index }) =>
+          entry.player.position !== "GK" && !changedSlots.has(index),
+      );
+    if (!eligible.length) break;
+    random = nextRandom(randomState);
+    randomState = random.state;
+    const chosen = eligible[Math.floor(random.value * eligible.length)];
+    const replacements = roster.filter(
+      (player) =>
+        player.position === chosen.entry.player.position &&
+        !used.has(player.id),
+    );
+    if (!replacements.length) continue;
+    random = nextRandom(randomState);
+    randomState = random.state;
+    const replacement =
+      replacements[Math.floor(random.value * replacements.length)];
+    used.delete(chosen.entry.player.id);
+    used.add(replacement.id);
+    selectedLineup[chosen.index] = {
+      ...chosen.entry,
+      player: replacement,
+    };
+    changedSlots.add(chosen.index);
+  }
+
+  return selectedLineup;
 };
 
 export function createMatch(
   definition: MatchDefinition,
   campaign: CampaignState,
 ): MatchState {
-  const homeTeam = TEAMS.KOR;
-  const awayTeam = TEAMS[definition.opponentId];
-  const homePlayers = availableKoreaPlayers(campaign).map((player, index) =>
-    createMatchPlayer(player, "home", index, campaign),
+  const baseHomeTeam = TEAMS.KOR;
+  const homeTeam = {
+    ...baseHomeTeam,
+    roster: baseHomeTeam.roster.map((player) => ({
+      ...player,
+      currentStamina: campaign.playerCarry[player.id]?.stamina ?? 100,
+      condition: campaign.playerCarry[player.id]?.condition ?? 92,
+    })),
+  };
+  const opponentPlanSeed =
+    ((campaign.scoutingSeed ?? definition.seed) ^ definition.seed) >>> 0;
+  const baseAwayTeam = TEAMS[definition.opponentId];
+  const awayTeam = {
+    ...baseAwayTeam,
+    roster: baseAwayTeam.roster.map((player) => ({
+      ...player,
+      currentStamina: 100,
+      condition: 92,
+    })),
+    formationName: opponentFormationFor(
+      definition.opponentId,
+      opponentPlanSeed,
+    ),
+  };
+  const homePlayers = selectExpectedLineup("KOR", homeTeam.roster, campaign).map(
+    ({ player, slot }, index) =>
+      createMatchPlayer(
+        player,
+        "home",
+        index,
+        campaign,
+        slot,
+        homeTeam.formationName,
+      ),
   );
-  const awayPlayers = selectFormationPlayers(awayTeam.roster)
-    .map((player, index) => createMatchPlayer(player, "away", index));
+  const awayPlayers = selectExpectedLineup(
+    awayTeam.id,
+    awayTeam.roster,
+    undefined,
+    opponentPlanSeed ^ 0x9e3779b9,
+  ).map(({ player, slot }, index) =>
+    createMatchPlayer(
+      player,
+      "away",
+      index,
+      undefined,
+      slot,
+      awayTeam.formationName,
+    ),
+  );
 
   const kickoff: MatchEvent = {
     id: `${definition.id}-briefing`,
@@ -159,7 +320,10 @@ export function createMatch(
       zone: 0,
     },
     possession: "home",
-    homeTactic: { ...homeTeam.defaultTactic },
+    homeTactic: tacticStateFromPreset(
+      "BALANCED_433",
+      homeTeam.defaultTactic,
+    ),
     awayTactic: { ...awayTeam.defaultTactic },
     events: [kickoff],
     feedback: [
@@ -177,7 +341,411 @@ export function createMatch(
     eventCooldown: 1.5,
     feedbackCooldown: 8,
     halfTimeAp: 10,
+    substitutionsUsed: 0,
+    substitutedOutPlayerIds: [],
+    pendingSubstitutions: [],
+    tacticLoadout: { ...DEFAULT_TACTIC_LOADOUT },
   };
+}
+
+const tacticStateFromPreset = (
+  presetId: TacticPresetId,
+  current: TacticState,
+): TacticState => {
+  const preset = tacticPresetById(presetId);
+  return {
+    ...current,
+    presetId,
+    formation: preset.formation,
+    pressing: preset.pressing,
+    defensiveLine: preset.defensiveLine,
+    tempo: preset.tempo,
+    width: preset.width,
+    attackSide: preset.attackSide,
+    preparedPlan: `${preset.formation} ${preset.name}`,
+    preparedPlanActive: false,
+  };
+};
+
+const applyTacticPreset = (
+  state: MatchState,
+  presetId: TacticPresetId,
+): MatchState => {
+  const preset = tacticPresetById(presetId);
+  const homePlayers = state.players.filter(
+    (player) => player.side === "home" && player.onField,
+  );
+  const goalkeeper = homePlayers.find((player) => player.position === "GK");
+  const outfieldPlayers = homePlayers
+    .filter((player) => player.id !== goalkeeper?.id)
+    .sort((a, b) => a.baseX - b.baseX || a.baseY - b.baseY);
+  const outfieldSlots = preset.slots
+    .slice(1)
+    .sort((a, b) => a.x - b.x || a.y - b.y);
+  const slotByPlayer = new Map<string, { x: number; y: number }>();
+  if (goalkeeper) slotByPlayer.set(goalkeeper.id, preset.slots[0]);
+  outfieldPlayers.forEach((player, index) => {
+    const slot = outfieldSlots[index];
+    if (slot) slotByPlayer.set(player.id, slot);
+  });
+  const event = {
+    id: `${state.id}-preset-${presetId}-${Math.round(state.gameMinute)}-${state.events.length}`,
+    minute: Math.round(state.gameMinute),
+    type: "TACTIC" as const,
+    side: "home" as const,
+    text: `전술 전환 · ${preset.formation} ${preset.name}`,
+    emphasis: "important" as const,
+  };
+
+  return {
+    ...state,
+    homeTeam: { ...state.homeTeam, formationName: preset.formation },
+    homeTactic: tacticStateFromPreset(presetId, state.homeTactic),
+    players: state.players.map((player) => {
+      const slot = slotByPlayer.get(player.id);
+      return slot
+        ? {
+            ...player,
+            x: slot.x,
+            y: slot.y,
+            baseX: slot.x,
+            baseY: slot.y,
+            targetX: slot.x,
+            targetY: slot.y,
+          }
+        : player;
+    }),
+    events: state.phase === "PRE_MATCH" ? state.events : [event, ...state.events],
+  };
+};
+
+export function configureTacticLoadout(
+  state: MatchState,
+  slot: keyof TacticLoadout,
+  presetId: TacticPresetId,
+): MatchState {
+  if (state.phase !== "PRE_MATCH") return state;
+  const currentLoadout = state.tacticLoadout ?? DEFAULT_TACTIC_LOADOUT;
+  const occupiedSlot = (Object.entries(currentLoadout) as Array<
+    [keyof TacticLoadout, TacticPresetId]
+  >).find(([, currentPresetId]) => currentPresetId === presetId)?.[0];
+  const nextLoadout = { ...currentLoadout };
+  if (occupiedSlot && occupiedSlot !== slot) {
+    nextLoadout[occupiedSlot] = nextLoadout[slot];
+  }
+  nextLoadout[slot] = presetId;
+  const updated = { ...state, tacticLoadout: nextLoadout };
+  return slot === "main" ? applyTacticPreset(updated, presetId) : updated;
+}
+
+export function switchToSubTactic(
+  state: MatchState,
+  slot: "sub1" | "sub2",
+): MatchState {
+  if (state.phase === "PRE_MATCH" || state.phase === "FINISHED") return state;
+  const tacticLoadout = state.tacticLoadout ?? DEFAULT_TACTIC_LOADOUT;
+  return applyTacticPreset(state, tacticLoadout[slot]);
+}
+
+const createHomeReplacement = (
+  incoming: RosterPlayer,
+  outgoing: MatchPlayer,
+  carry?: CarryPlayerState,
+): MatchPlayer => ({
+  ...incoming,
+  number: incoming.shirtNumber,
+  attributes: incoming.gameAttributes,
+  side: "home",
+  x: outgoing.x,
+  y: outgoing.y,
+  baseX: outgoing.baseX,
+  baseY: outgoing.baseY,
+  targetX: outgoing.targetX,
+  targetY: outgoing.targetY,
+  currentStamina: carry?.stamina ?? 100,
+  bonusStamina: 0,
+  condition: carry?.condition ?? 92,
+  managerTrust: carry?.managerTrust ?? 72,
+  card: "NONE",
+  injuryRisk: carry?.injuryMatchesRemaining
+    ? 0.2
+    : (incoming.advancedAbilities.injuryRisk ?? 20) / 500,
+  injured: false,
+  onField: true,
+});
+
+export function substitutePreMatchPlayer(
+  state: MatchState,
+  outgoingPlayerId: string,
+  incomingPlayerId: string,
+  carry?: CarryPlayerState,
+): MatchState {
+  if (state.phase !== "PRE_MATCH") return state;
+  const outgoing = state.players.find(
+    (player) =>
+      player.id === outgoingPlayerId && player.side === "home" && player.onField,
+  );
+  const incoming = state.homeTeam.roster.find(
+    (player) => player.id === incomingPlayerId,
+  );
+  if (
+    !outgoing ||
+    !incoming ||
+    state.players.some((player) => player.id === incoming.id)
+  ) {
+    return state;
+  }
+
+  const replacement = createHomeReplacement(incoming, outgoing, carry);
+
+  return {
+    ...state,
+    players: state.players.map((player) =>
+      player.id === outgoing.id ? replacement : player,
+    ),
+    ball:
+      state.ball.ownerPlayerId === outgoing.id
+        ? { ...state.ball, ownerPlayerId: replacement.id }
+        : state.ball,
+  };
+}
+
+export function substituteHalfTimePlayer(
+  state: MatchState,
+  outgoingPlayerId: string,
+  incomingPlayerId: string,
+  carry?: CarryPlayerState,
+): MatchState {
+  if (state.phase !== "HALF_TIME" || state.substitutionsUsed >= 5) return state;
+  const outgoing = state.players.find(
+    (player) =>
+      player.id === outgoingPlayerId && player.side === "home" && player.onField,
+  );
+  const incoming = state.homeTeam.roster.find(
+    (player) => player.id === incomingPlayerId,
+  );
+  if (
+    !outgoing ||
+    !incoming ||
+    state.players.some((player) => player.id === incoming.id) ||
+    state.substitutedOutPlayerIds.includes(incoming.id)
+  ) {
+    return state;
+  }
+
+  const replacement = createHomeReplacement(incoming, outgoing, carry);
+  const substitutionNumber = state.substitutionsUsed + 1;
+
+  return {
+    ...state,
+    players: state.players.map((player) =>
+      player.id === outgoing.id ? replacement : player,
+    ),
+    ball:
+      state.ball.ownerPlayerId === outgoing.id
+        ? { ...state.ball, ownerPlayerId: replacement.id }
+        : state.ball,
+    substitutionsUsed: substitutionNumber,
+    substitutedOutPlayerIds: [
+      ...state.substitutedOutPlayerIds,
+      outgoing.id,
+    ],
+    events: [
+      {
+        id: `${state.id}-sub-${substitutionNumber}`,
+        minute: 45,
+        type: "TACTIC",
+        side: "home",
+        text: `하프타임 교체 · ${outgoing.name} OUT, ${replacement.name} IN`,
+        emphasis: "important",
+      },
+      ...state.events,
+    ],
+    feedback: [
+      {
+        id: `${state.id}-sub-feedback-${substitutionNumber}`,
+        coach: "전술",
+        severity: "정보",
+        text: `${replacement.name}이 ${outgoing.name}의 위치에서 후반전을 준비합니다.`,
+        minute: 45,
+      },
+      ...state.feedback,
+    ],
+  };
+}
+
+const ACTIVE_MATCH_PHASES = new Set<MatchPhase>([
+  "OBSERVE_0_22",
+  "OBSERVE_22_45",
+  "OBSERVE_45_67",
+  "OBSERVE_67_90",
+]);
+
+const BREAK_PHASES = new Set<MatchPhase>([
+  "HYDRATION_FIRST",
+  "HALF_TIME",
+  "HYDRATION_SECOND",
+]);
+
+const completeHomeSubstitution = (
+  state: MatchState,
+  outgoingPlayerId: string,
+  incomingPlayerId: string,
+  carry?: CarryPlayerState,
+  source = "경기 중 교체",
+): MatchState => {
+  const substitutionsUsed = state.substitutionsUsed ?? 0;
+  const substitutedOutPlayerIds = state.substitutedOutPlayerIds ?? [];
+  if (substitutionsUsed >= 5) return state;
+  const outgoing = state.players.find(
+    (player) =>
+      player.id === outgoingPlayerId && player.side === "home" && player.onField,
+  );
+  const incoming = state.homeTeam.roster.find(
+    (player) => player.id === incomingPlayerId,
+  );
+  if (
+    !outgoing ||
+    !incoming ||
+    state.players.some((player) => player.id === incoming.id) ||
+    substitutedOutPlayerIds.includes(incoming.id)
+  ) {
+    return state;
+  }
+
+  const replacement = createHomeReplacement(incoming, outgoing, carry);
+  const substitutionNumber = substitutionsUsed + 1;
+  const minute = Math.round(state.gameMinute);
+
+  return {
+    ...state,
+    players: state.players.map((player) =>
+      player.id === outgoing.id ? replacement : player,
+    ),
+    ball:
+      state.ball.ownerPlayerId === outgoing.id
+        ? { ...state.ball, ownerPlayerId: replacement.id }
+        : state.ball,
+    substitutionsUsed: substitutionNumber,
+    substitutedOutPlayerIds: [
+      ...substitutedOutPlayerIds,
+      outgoing.id,
+    ],
+    events: [
+      {
+        id: `${state.id}-live-sub-${substitutionNumber}-${minute}`,
+        minute,
+        type: "TACTIC",
+        side: "home",
+        text: `${source} · ${outgoing.name} OUT, ${replacement.name} IN`,
+        emphasis: "important",
+      },
+      ...state.events,
+    ],
+    feedback: [
+      {
+        id: `${state.id}-live-sub-feedback-${substitutionNumber}-${minute}`,
+        coach: "전술",
+        severity: "정보",
+        text: `${replacement.name}이 ${outgoing.name}의 전술 위치를 이어받았습니다.`,
+        minute,
+      },
+      ...state.feedback,
+    ],
+  };
+};
+
+export function substitutePausedPlayer(
+  state: MatchState,
+  outgoingPlayerId: string,
+  incomingPlayerId: string,
+  carry?: CarryPlayerState,
+): MatchState {
+  if (!ACTIVE_MATCH_PHASES.has(state.phase)) return state;
+  return completeHomeSubstitution(
+    state,
+    outgoingPlayerId,
+    incomingPlayerId,
+    carry,
+    "경기 중 교체",
+  );
+}
+
+export function queueSubstitution(
+  state: MatchState,
+  outgoingPlayerId: string,
+  incomingPlayerId: string,
+): MatchState {
+  const pendingSubstitutions = state.pendingSubstitutions ?? [];
+  if (
+    !BREAK_PHASES.has(state.phase) ||
+    (state.substitutionsUsed ?? 0) + pendingSubstitutions.length >= 5
+  ) {
+    return state;
+  }
+  const outgoing = state.players.find(
+    (player) =>
+      player.id === outgoingPlayerId && player.side === "home" && player.onField,
+  );
+  const incoming = state.homeTeam.roster.find(
+    (player) => player.id === incomingPlayerId,
+  );
+  const alreadyReserved = pendingSubstitutions.some(
+    (item) =>
+      item.outgoingPlayerId === outgoingPlayerId ||
+      item.incomingPlayerId === incomingPlayerId,
+  );
+  if (
+    !outgoing ||
+    !incoming ||
+    alreadyReserved ||
+    state.players.some((player) => player.id === incoming.id) ||
+    (state.substitutedOutPlayerIds ?? []).includes(incoming.id)
+  ) {
+    return state;
+  }
+
+  const pending: PendingSubstitution = {
+    id: `${outgoing.id}-${incoming.id}`,
+    outgoingPlayerId: outgoing.id,
+    incomingPlayerId: incoming.id,
+    requestedPhase: state.phase,
+    requestedMinute: Math.round(state.gameMinute),
+  };
+  return {
+    ...state,
+    pendingSubstitutions: [...pendingSubstitutions, pending],
+  };
+}
+
+export function cancelPendingSubstitution(
+  state: MatchState,
+  pendingId: string,
+): MatchState {
+  if (!BREAK_PHASES.has(state.phase)) return state;
+  return {
+    ...state,
+    pendingSubstitutions: (state.pendingSubstitutions ?? []).filter(
+      (item) => item.id !== pendingId,
+    ),
+  };
+}
+
+export function applyPendingSubstitutions(
+  state: MatchState,
+  carryByPlayer: Partial<Record<string, CarryPlayerState>> = {},
+): MatchState {
+  let next = state;
+  for (const pending of state.pendingSubstitutions ?? []) {
+    next = completeHomeSubstitution(
+      next,
+      pending.outgoingPlayerId,
+      pending.incomingPlayerId,
+      carryByPlayer[pending.incomingPlayerId],
+      "예약 교체 적용",
+    );
+  }
+  return { ...next, pendingSubstitutions: [] };
 }
 
 export function startMatch(state: MatchState): MatchState {
@@ -546,6 +1114,7 @@ function drainStamina(state: MatchState, seconds: number): MatchState {
     return {
       ...player,
       currentStamina: Math.max(0, player.currentStamina - drain),
+      bonusStamina: Math.max(0, player.bonusStamina - drain),
       injuryRisk: Math.min(
         0.45,
         player.injuryRisk + (player.currentStamina < 45 ? seconds * 0.0007 : 0),
@@ -778,7 +1347,36 @@ export function advanceMatch(
   return next;
 }
 
-export function continueMatch(state: MatchState): MatchState {
+/**
+ * Runs the simulation on the canonical 0.5-second tick. Playback controls may
+ * change how many ticks run per render interval, but never the tick size.
+ */
+export function advanceMatchTicks(
+  state: MatchState,
+  tickCount: number,
+): MatchState {
+  let next = state;
+  for (let tick = 0; tick < tickCount; tick += 1) {
+    next = advanceMatch(next, 0.5);
+  }
+  return next;
+}
+
+export function skipObservationSegment(state: MatchState): MatchState {
+  const startingPhase = state.phase;
+  let next = state;
+  let guard = 0;
+  while (next.phase === startingPhase && guard < 240) {
+    next = advanceMatchTicks(next, 1);
+    guard += 1;
+  }
+  return next;
+}
+
+export function continueMatch(
+  state: MatchState,
+  carryByPlayer: Partial<Record<string, CarryPlayerState>> = {},
+): MatchState {
   const nextPhase: Partial<Record<MatchPhase, MatchPhase>> = {
     HYDRATION_FIRST: "OBSERVE_22_45",
     HALF_TIME: "OBSERVE_45_67",
@@ -787,8 +1385,10 @@ export function continueMatch(state: MatchState): MatchState {
   const phase = nextPhase[state.phase];
   if (!phase) return state;
 
+  const preparedState = applyPendingSubstitutions(state, carryByPlayer);
+
   return {
-    ...state,
+    ...preparedState,
     phase,
     phaseElapsed: 0,
     eventCooldown: 1.1,
@@ -802,15 +1402,26 @@ export function continueMatch(state: MatchState): MatchState {
         text:
           state.phase === "HALF_TIME"
             ? "후반전이 시작됩니다. 하프타임 선택이 경기 흐름에 반영됩니다."
-            : "브레이크가 끝났습니다. 전달한 지시만 경기장에 남습니다.",
+            : "브레이크가 끝났습니다. 전달한 지시와 예약 교체가 경기장에 반영됩니다.",
         emphasis: "important",
       },
-      ...state.events,
+      ...preparedState.events,
     ],
   };
 }
 
 export function applyHalfTimeRecovery(state: MatchState): MatchState {
+  const definition = COMMANDS.HALFTIME_RECOVERY;
+  const command = {
+    id: `command-${state.commands.length + 1}-${Math.round(state.gameMinute)}`,
+    kind: "HALFTIME_RECOVERY" as const,
+    label: definition.label,
+    cost: 0,
+    minute: Math.round(state.gameMinute),
+    effect: definition.effect,
+    tradeoff: definition.tradeoff,
+    baseline: createCommandBaseline(state),
+  };
   return {
     ...state,
     players: state.players.map((player) =>
@@ -818,9 +1429,22 @@ export function applyHalfTimeRecovery(state: MatchState): MatchState {
         ? {
             ...player,
             currentStamina: Math.min(100, player.currentStamina + 12),
+            bonusStamina: Math.min(18, player.bonusStamina + 12),
           }
         : player,
     ),
+    commands: [...state.commands, command],
+    events: [
+      {
+        id: `${state.id}-halftime-recovery`,
+        minute: 45,
+        type: "TACTIC",
+        side: "home",
+        text: "하프타임을 회복에 집중해 후반전에 사용할 추가 체력을 확보했습니다.",
+        emphasis: "important",
+      },
+      ...state.events,
+    ],
   };
 }
 
@@ -864,6 +1488,9 @@ export function createMatchResult(state: MatchState): MatchResult {
     awayGoals: state.score.away,
     pointsEarned,
     commands: state.commands,
+    commandEvaluations: state.commands.map((command) =>
+      evaluateCommandImpact(state, command),
+    ),
     metrics: state.metrics,
     playerStates: state.players,
   };

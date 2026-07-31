@@ -5,13 +5,15 @@ import {
   useRef,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import type { MatchState } from "../types";
+import type { MatchState, Side } from "../types";
 
 interface TacticalBoardProps {
   match: MatchState;
   selectedPlayerId?: string;
   editable?: boolean;
   compact?: boolean;
+  selectableSide?: Side;
+  focusSide?: Side;
   onSelectPlayer?: (playerId: string) => void;
   onMovePlayer?: (playerId: string, x: number, y: number) => void;
 }
@@ -23,11 +25,45 @@ interface DisplayPoint {
   vy?: number;
 }
 
+const hexWithAlpha = (hex: string, alpha: number): string => {
+  const normalized = hex.replace("#", "");
+  const expanded =
+    normalized.length === 3
+      ? normalized
+          .split("")
+          .map((character) => character + character)
+          .join("")
+      : normalized;
+  if (!/^[0-9a-f]{6}$/i.test(expanded)) return hex;
+  const value = Number.parseInt(expanded, 16);
+  return `rgba(${(value >> 16) & 255}, ${(value >> 8) & 255}, ${value & 255}, ${alpha})`;
+};
+
+const contrastText = (hex: string): string => {
+  const normalized = hex.replace("#", "");
+  const expanded =
+    normalized.length === 3
+      ? normalized
+          .split("")
+          .map((character) => character + character)
+          .join("")
+      : normalized;
+  if (!/^[0-9a-f]{6}$/i.test(expanded)) return "#ffffff";
+  const value = Number.parseInt(expanded, 16);
+  const luminance =
+    0.299 * ((value >> 16) & 255) +
+    0.587 * ((value >> 8) & 255) +
+    0.114 * (value & 255);
+  return luminance > 155 ? "#102019" : "#ffffff";
+};
+
 export function TacticalBoard({
   match,
   selectedPlayerId,
   editable = false,
   compact = false,
+  selectableSide = "home",
+  focusSide,
   onSelectPlayer,
   onMovePlayer,
 }: TacticalBoardProps) {
@@ -68,6 +104,16 @@ export function TacticalBoard({
       const w = rect.width;
       const h = rect.height;
       const padding = compact ? 12 : 18;
+
+      // During screen transitions the flex layout can briefly collapse the
+      // canvas below its drawing padding. CanvasRenderingContext2D.arc throws
+      // when that produces a negative radius, so wait for a valid layout.
+      if (w <= padding * 2 || h <= padding * 2) {
+        context.clearRect(0, 0, Math.max(1, w), Math.max(1, h));
+        animationFrame = window.requestAnimationFrame(draw);
+        return;
+      }
+
       const fieldX = padding;
       const fieldY = padding;
       const fieldW = w - padding * 2;
@@ -156,8 +202,75 @@ export function TacticalBoard({
         goalWidth,
       );
 
+      const activeKinds = new Set(
+        current.commands.map((command) => command.kind),
+      );
+      if (activeKinds.has("PRESS_HIGHER")) {
+        context.fillStyle = "rgba(211, 164, 79, 0.12)";
+        context.fillRect(
+          fieldX + fieldW * 0.62,
+          fieldY,
+          fieldW * 0.34,
+          fieldH,
+        );
+        context.fillStyle = "rgba(238, 197, 121, 0.78)";
+        context.font = `800 ${compact ? 12 : 14}px ui-sans-serif, sans-serif`;
+        context.textAlign = "right";
+        context.fillText(
+          "전방 압박 구역",
+          fieldX + fieldW * 0.94,
+          fieldY + 14,
+        );
+      }
+
+      if (
+        activeKinds.has("ATTACK_WIDE") ||
+        activeKinds.has("PREPARED_PLAN")
+      ) {
+        const targetTop = current.homeTactic.attackSide === "left";
+        const bandY = targetTop ? fieldY : fieldY + fieldH * 0.76;
+        context.fillStyle = "rgba(106, 164, 191, 0.14)";
+        context.fillRect(fieldX, bandY, fieldW, fieldH * 0.24);
+        context.strokeStyle = "rgba(128, 192, 220, 0.7)";
+        context.lineWidth = compact ? 1 : 2;
+        context.setLineDash([8, 6]);
+        context.beginPath();
+        context.moveTo(fieldX + fieldW * 0.35, bandY + fieldH * 0.12);
+        context.lineTo(fieldX + fieldW * 0.82, bandY + fieldH * 0.12);
+        context.stroke();
+        context.setLineDash([]);
+      }
+
+      if (activeKinds.has("LOWER_LINE")) {
+        const defenders = current.players.filter(
+          (player) =>
+            player.side === "home" &&
+            player.onField &&
+            player.position === "DF",
+        );
+        const lineX = defenders.length
+          ? defenders.reduce((total, player) => total + player.x, 0) /
+            defenders.length
+          : 0.2;
+        const displayLineX = fieldX + lineX * fieldW;
+        context.strokeStyle = "rgba(238, 197, 121, 0.88)";
+        context.lineWidth = compact ? 1 : 2;
+        context.setLineDash([6, 5]);
+        context.beginPath();
+        context.moveTo(displayLineX, fieldY);
+        context.lineTo(displayLineX, fieldY + fieldH);
+        context.stroke();
+        context.setLineDash([]);
+        context.fillStyle = "rgba(238, 197, 121, 0.9)";
+        context.font = `800 ${compact ? 12 : 14}px ui-sans-serif, sans-serif`;
+        context.textAlign = "left";
+        context.fillText("수비 기준선", displayLineX + 5, fieldY + 14);
+      }
+
       for (const player of current.players) {
         if (!player.onField) continue;
+        context.globalAlpha =
+          focusSide && player.side !== focusSide ? 0.22 : 1;
         const existing = displayPoints.current[player.id] ?? {
           x: player.x,
           y: player.y,
@@ -174,7 +287,13 @@ export function TacticalBoard({
         const y = fieldY + existing.y * fieldH;
         const radius = compact ? 7 : Math.max(8, Math.min(12, fieldW / 55));
         const selected = latestSelected.current === player.id;
+        const personalCommand = current.commands
+          .slice()
+          .reverse()
+          .find((command) => command.targetPlayerId === player.id);
         const speed = Math.hypot(existing.vx ?? 0, existing.vy ?? 0);
+        const team =
+          player.side === "home" ? current.homeTeam : current.awayTeam;
 
         if (speed > 0.00025) {
           context.beginPath();
@@ -183,10 +302,7 @@ export function TacticalBoard({
             y - (existing.vy ?? 0) * fieldH * 8,
           );
           context.lineTo(x, y);
-          context.strokeStyle =
-            player.side === "home"
-              ? "rgba(243, 240, 232, 0.28)"
-              : "rgba(201, 244, 89, 0.22)";
+          context.strokeStyle = hexWithAlpha(team.color, 0.34);
           context.lineWidth = compact ? 1.2 : 2;
           context.stroke();
         }
@@ -198,23 +314,57 @@ export function TacticalBoard({
           context.fill();
         }
 
+        if (personalCommand) {
+          context.beginPath();
+          context.arc(x, y, radius + 7, 0, Math.PI * 2);
+          context.strokeStyle =
+            personalCommand.kind === "CONSERVE_ENERGY"
+              ? "rgba(244, 197, 74, 0.92)"
+              : personalCommand.kind === "CENTRAL_RUN"
+                ? "rgba(224, 119, 91, 0.92)"
+                : "rgba(109, 190, 220, 0.92)";
+          context.lineWidth = compact ? 1.5 : 2.5;
+          context.setLineDash([4, 3]);
+          context.stroke();
+          context.setLineDash([]);
+
+          if (
+            !compact &&
+            (personalCommand.kind === "CENTRAL_RUN" ||
+              personalCommand.kind === "WINGER_TRACK")
+          ) {
+            const destinationX =
+              personalCommand.kind === "CENTRAL_RUN"
+                ? fieldX + fieldW * 0.88
+                : fieldX + player.baseX * fieldW;
+            const destinationY =
+              personalCommand.kind === "CENTRAL_RUN"
+                ? fieldY + fieldH * 0.5
+                : fieldY + player.baseY * fieldH;
+            context.strokeStyle =
+              personalCommand.kind === "CENTRAL_RUN"
+                ? "rgba(224, 119, 91, 0.68)"
+                : "rgba(109, 190, 220, 0.68)";
+            context.lineWidth = 1.5;
+            context.beginPath();
+            context.moveTo(x, y);
+            context.lineTo(destinationX, destinationY);
+            context.stroke();
+          }
+        }
+
         context.beginPath();
         context.arc(x, y, radius, 0, Math.PI * 2);
-        context.fillStyle =
-          player.side === "home"
-            ? player.injured
-              ? "#9f5f5f"
-              : "#f3f0e8"
-            : current.awayTeam.color;
+        context.fillStyle = player.injured ? "#76575a" : team.color;
         context.fill();
-        context.strokeStyle =
-          player.side === "home" ? "#d93445" : current.awayTeam.accent;
+        context.strokeStyle = team.accent;
         context.lineWidth = selected ? 3 : 2;
         context.stroke();
 
-        context.fillStyle =
-          player.side === "home" ? "#12231d" : "#071b15";
-        context.font = `700 ${compact ? 8 : 10}px ui-sans-serif, sans-serif`;
+        context.fillStyle = contrastText(
+          player.injured ? "#76575a" : team.color,
+        );
+        context.font = `700 ${compact ? 13 : 15}px ui-sans-serif, sans-serif`;
         context.textAlign = "center";
         context.textBaseline = "middle";
         context.fillText(String(player.number), x, y + 0.5);
@@ -224,6 +374,7 @@ export function TacticalBoard({
             player.card === "YELLOW" ? "#f4cd3c" : "#ed5252";
           context.fillRect(x + radius - 1, y - radius - 2, 5, 8);
         }
+        context.globalAlpha = 1;
       }
 
       displayBall.current.x +=
@@ -261,7 +412,7 @@ export function TacticalBoard({
 
     draw();
     return () => window.cancelAnimationFrame(animationFrame);
-  }, [compact]);
+  }, [compact, focusSide]);
 
   const pointerPosition = (
     event: ReactPointerEvent<HTMLCanvasElement>,
@@ -285,7 +436,7 @@ export function TacticalBoard({
   ) => {
     const point = pointerPosition(event);
     const selectablePlayers = match.players.filter(
-      (player) => player.side === "home" && player.onField,
+      (player) => player.side === selectableSide && player.onField,
     );
     const nearest = selectablePlayers
       .map((player) => ({

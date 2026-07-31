@@ -6,14 +6,25 @@ export type DetailedPosition =
   | "RB"
   | "CB"
   | "LB"
+  | "RWB"
+  | "LWB"
   | "DM"
   | "CM"
   | "AM"
+  | "RM"
+  | "LM"
   | "RW"
   | "LW"
+  | "SS"
   | "ST";
 export type PreferredFoot = "LEFT" | "RIGHT" | "BOTH" | "UNKNOWN";
 export type AttackSide = "left" | "center" | "right";
+export type TacticPresetId =
+  | "BALANCED_433"
+  | "CONTROL_4231"
+  | "COUNTER_442"
+  | "PRESS_343"
+  | "BLOCK_541";
 
 export type MatchPhase =
   | "PRE_MATCH"
@@ -34,7 +45,8 @@ export type CommandKind =
   | "WINGER_TRACK"
   | "CENTRAL_RUN"
   | "CONSERVE_ENERGY"
-  | "CAPTAIN_RALLY";
+  | "CAPTAIN_RALLY"
+  | "HALFTIME_RECOVERY";
 
 export interface PlayerAttributes {
   passing: number;
@@ -46,16 +58,84 @@ export interface PlayerAttributes {
   roleFamiliarity: number;
 }
 
+export interface PlayerCoreAbilities {
+  overall: number;
+  pace: number;
+  shooting: number;
+  passing: number;
+  dribbling: number;
+  defending: number;
+  physical: number;
+}
+
+export interface PlayerAdvancedAbilities {
+  ballControl?: number;
+  firstTouch?: number;
+  finishing?: number;
+  crossing?: number;
+  longShots?: number;
+  setPieces?: number;
+  acceleration?: number;
+  stamina?: number;
+  strength?: number;
+  aerial?: number;
+  positioning?: number;
+  decisions?: number;
+  pressing?: number;
+  defensiveAwareness?: number;
+  offBall?: number;
+  composure?: number;
+  aggression?: number;
+  leadership?: number;
+  consistency?: number;
+  recovery?: number;
+  tacticalAdaptability?: number;
+  injuryRisk?: number;
+  gkReflexes?: number;
+  gkHandling?: number;
+  gkDistribution?: number;
+  gkPositioning?: number;
+  gkAerialCommand?: number;
+  gkOneOnOnes?: number;
+}
+
 export interface RosterPlayer {
   id: string;
   teamId: TeamId;
   name: string;
+  originalName: string;
   shirtNumber: number;
   position: Position;
   detailedPosition: DetailedPosition;
+  secondaryPositions: DetailedPosition[];
   club: string;
+  clubCountry: string;
+  dateOfBirth: string;
   birthYear: number;
+  age: number;
+  heightCm: number;
+  weightKg?: number;
+  weightSource?: string;
+  weightSourceUrl?: string;
+  weightNote?: string;
+  caps: number;
+  goals: number;
   preferredFoot: PreferredFoot;
+  coreAbilities: PlayerCoreAbilities;
+  advancedAbilities: PlayerAdvancedAbilities;
+  gameAttributes: PlayerAttributes;
+  confidenceScore: number;
+  confidenceGrade: string;
+  isExpectedStarter: boolean;
+  squadRole: string;
+  strengths: string;
+  weakness: string;
+  traits: string[];
+  ratingBasis: string;
+  ratingEstimated: boolean;
+  /** Match-day values used by lineup and comparison UIs for bench players. */
+  currentStamina?: number;
+  condition?: number;
 }
 
 export interface CarryPlayerState {
@@ -79,6 +159,8 @@ export interface MatchPlayer extends RosterPlayer {
   targetX: number;
   targetY: number;
   currentStamina: number;
+  /** Portion of currentStamina granted by a recovery/energy instruction. */
+  bonusStamina: number;
   condition: number;
   managerTrust: number;
   card: "NONE" | "YELLOW" | "RED";
@@ -88,7 +170,8 @@ export interface MatchPlayer extends RosterPlayer {
 }
 
 export interface TacticState {
-  formation: "4-3-3";
+  formation: "4-3-3" | "4-2-3-1" | "4-4-2" | "3-4-3" | "5-4-1";
+  presetId?: TacticPresetId;
   pressing: number;
   defensiveLine: number;
   tempo: number;
@@ -107,6 +190,7 @@ export interface TeamDefinition {
   styleName: string;
   styleDescription: string;
   coachHint: string;
+  formationName: string;
   defaultTactic: TacticState;
   roster: RosterPlayer[];
 }
@@ -188,6 +272,36 @@ export interface AppliedCommand {
   minute: number;
   effect: string;
   tradeoff: string;
+  baseline: {
+    metrics: MatchMetrics;
+    defensiveLine: number;
+    pressing: number;
+    width: number;
+    averageHomeStamina: number;
+    targetStamina?: number;
+  };
+}
+
+export interface CommandEvaluation {
+  commandId: string;
+  successRate: number;
+  status: "정착 중" | "적용 중" | "잘 작동함" | "효과 미미";
+  headline: string;
+  detail: string;
+}
+
+export interface PendingSubstitution {
+  id: string;
+  outgoingPlayerId: string;
+  incomingPlayerId: string;
+  requestedPhase: MatchPhase;
+  requestedMinute: number;
+}
+
+export interface TacticLoadout {
+  main: TacticPresetId;
+  sub1: TacticPresetId;
+  sub2: TacticPresetId;
 }
 
 export interface MatchState {
@@ -212,6 +326,10 @@ export interface MatchState {
   eventCooldown: number;
   feedbackCooldown: number;
   halfTimeAp: number;
+  substitutionsUsed: number;
+  substitutedOutPlayerIds: string[];
+  pendingSubstitutions: PendingSubstitution[];
+  tacticLoadout: TacticLoadout;
 }
 
 export interface StandingRow {
@@ -233,12 +351,15 @@ export interface MatchResult {
   awayGoals: number;
   pointsEarned: number;
   commands: AppliedCommand[];
+  commandEvaluations: CommandEvaluation[];
   metrics: MatchMetrics;
   playerStates: MatchPlayer[];
 }
 
 export interface CampaignState {
   currentRound: number;
+  /** Changes opponent scouting estimates between new campaign playthroughs. */
+  scoutingSeed: number;
   standings: Record<TeamId, StandingRow>;
   playerCarry: Record<string, CarryPlayerState>;
   morale: number;
