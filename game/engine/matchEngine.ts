@@ -49,6 +49,16 @@ const emptyMetrics = (): MatchMetrics => ({
   homeRightThreat: 0,
   awayRightThreat: 0,
   tacticalWins: 0,
+  homeShotsOnTarget: 0,
+  awayShotsOnTarget: 0,
+  homeFouls: 0,
+  awayFouls: 0,
+  homeCards: 0,
+  awayCards: 0,
+  homeCorners: 0,
+  awayCorners: 0,
+  homePossessionSeconds: 0,
+  awayPossessionSeconds: 0,
 });
 
 const SLOT_COORDINATES: Record<string, { x: number; y: number }> = {
@@ -554,7 +564,7 @@ export function substituteHalfTimePlayer(
       {
         id: `${state.id}-sub-${substitutionNumber}`,
         minute: 45,
-        type: "TACTIC",
+        type: "SUBSTITUTION",
         side: "home",
         text: `하프타임 교체 · ${outgoing.name} OUT, ${replacement.name} IN`,
         emphasis: "important",
@@ -635,7 +645,7 @@ const completeHomeSubstitution = (
       {
         id: `${state.id}-live-sub-${substitutionNumber}-${minute}`,
         minute,
-        type: "TACTIC",
+        type: "SUBSTITUTION",
         side: "home",
         text: `${source} · ${outgoing.name} OUT, ${replacement.name} IN`,
         emphasis: "important",
@@ -675,10 +685,11 @@ export function queueSubstitution(
   state: MatchState,
   outgoingPlayerId: string,
   incomingPlayerId: string,
+  targetPhase?: PendingSubstitution["targetPhase"],
 ): MatchState {
   const pendingSubstitutions = state.pendingSubstitutions ?? [];
   if (
-    !BREAK_PHASES.has(state.phase) ||
+    (!BREAK_PHASES.has(state.phase) && !ACTIVE_MATCH_PHASES.has(state.phase)) ||
     (state.substitutionsUsed ?? 0) + pendingSubstitutions.length >= 5
   ) {
     return state;
@@ -711,6 +722,7 @@ export function queueSubstitution(
     incomingPlayerId: incoming.id,
     requestedPhase: state.phase,
     requestedMinute: Math.round(state.gameMinute),
+    targetPhase,
   };
   return {
     ...state,
@@ -722,7 +734,9 @@ export function cancelPendingSubstitution(
   state: MatchState,
   pendingId: string,
 ): MatchState {
-  if (!BREAK_PHASES.has(state.phase)) return state;
+  if (!BREAK_PHASES.has(state.phase) && !ACTIVE_MATCH_PHASES.has(state.phase)) {
+    return state;
+  }
   return {
     ...state,
     pendingSubstitutions: (state.pendingSubstitutions ?? []).filter(
@@ -736,7 +750,10 @@ export function applyPendingSubstitutions(
   carryByPlayer: Partial<Record<string, CarryPlayerState>> = {},
 ): MatchState {
   let next = state;
-  for (const pending of state.pendingSubstitutions ?? []) {
+  const applicable = (state.pendingSubstitutions ?? []).filter(
+    (pending) => !pending.targetPhase || pending.targetPhase === state.phase,
+  );
+  for (const pending of applicable) {
     next = completeHomeSubstitution(
       next,
       pending.outgoingPlayerId,
@@ -745,7 +762,13 @@ export function applyPendingSubstitutions(
       "예약 교체 적용",
     );
   }
-  return { ...next, pendingSubstitutions: [] };
+  const appliedIds = new Set(applicable.map((pending) => pending.id));
+  return {
+    ...next,
+    pendingSubstitutions: (state.pendingSubstitutions ?? []).filter(
+      (pending) => !appliedIds.has(pending.id),
+    ),
+  };
 }
 
 export function startMatch(state: MatchState): MatchState {
@@ -865,6 +888,11 @@ function resolveEvent(state: MatchState): MatchState {
     const offenderPick = randomAttacker(defenders, randomState);
     randomState = offenderPick.state;
     const offender = offenderPick.player;
+    if (defendingSide === "home") {
+      next.metrics.homeFouls = (next.metrics.homeFouls ?? 0) + 1;
+    } else {
+      next.metrics.awayFouls = (next.metrics.awayFouls ?? 0) + 1;
+    }
     next = prependEvent(next, {
       id: `${next.id}-foul-${minute}-${next.events.length}`,
       minute,
@@ -883,6 +911,11 @@ function resolveEvent(state: MatchState): MatchState {
           ? 0.14
           : 0.24;
     if (cardRoll.value < cardChance) {
+      if (defendingSide === "home") {
+        next.metrics.homeCards = (next.metrics.homeCards ?? 0) + 1;
+      } else {
+        next.metrics.awayCards = (next.metrics.awayCards ?? 0) + 1;
+      }
       next.players = next.players.map((player) =>
         player.id === offender.id
           ? {
@@ -1030,6 +1063,16 @@ function resolveEvent(state: MatchState): MatchState {
       0.06,
       0.42,
     );
+    const onTarget = goalRoll.value < Math.max(goalChance, 0.58);
+    if (onTarget) {
+      if (attackingSide === "home") {
+        next.metrics.homeShotsOnTarget =
+          (next.metrics.homeShotsOnTarget ?? 0) + 1;
+      } else {
+        next.metrics.awayShotsOnTarget =
+          (next.metrics.awayShotsOnTarget ?? 0) + 1;
+      }
+    }
 
     if (goalRoll.value < goalChance) {
       next.score[attackingSide] += 1;
@@ -1055,6 +1098,21 @@ function resolveEvent(state: MatchState): MatchState {
         zone: 0,
       };
     } else {
+      if (goalRoll.value > 0.82) {
+        if (attackingSide === "home") {
+          next.metrics.homeCorners = (next.metrics.homeCorners ?? 0) + 1;
+        } else {
+          next.metrics.awayCorners = (next.metrics.awayCorners ?? 0) + 1;
+        }
+        next = prependEvent(next, {
+          id: `${next.id}-corner-${minute}-${next.events.length}`,
+          minute,
+          type: "CORNER",
+          side: attackingSide,
+          text: `${teamName(next, attackingSide)}, 코너킥 기회를 얻습니다.`,
+          emphasis: "important",
+        });
+      }
       next.possession = defendingSide;
       next.ball = {
         x: 0.5,
@@ -1318,6 +1376,15 @@ export function advanceMatch(
     eventCooldown: state.eventCooldown - seconds,
     feedbackCooldown: state.feedbackCooldown - seconds,
   };
+  next.metrics = {
+    ...next.metrics,
+    homePossessionSeconds:
+      (next.metrics.homePossessionSeconds ?? 0) +
+      (state.possession === "home" ? seconds : 0),
+    awayPossessionSeconds:
+      (next.metrics.awayPossessionSeconds ?? 0) +
+      (state.possession === "away" ? seconds : 0),
+  };
   next = drainStamina(next, seconds);
 
   if (next.eventCooldown <= 0) {
@@ -1454,7 +1521,7 @@ export function moveHomePlayer(
   x: number,
   y: number,
 ): MatchState {
-  if (state.phase !== "PRE_MATCH") return state;
+  if (state.phase !== "PRE_MATCH" && state.phase !== "HALF_TIME") return state;
   return {
     ...state,
     players: state.players.map((player) =>

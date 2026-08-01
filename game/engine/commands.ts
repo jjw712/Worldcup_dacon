@@ -62,6 +62,7 @@ export const COMMANDS: Record<CommandKind, CommandDefinition> = {
     minCost: 12,
     maxCost: 18,
     needsPlayer: true,
+    targetPositions: ["MF", "FW"],
     effect: "측면 수비와 수적 균형이 안정됩니다.",
     tradeoff: "선택 선수의 체력 소모와 역습 속도가 저하됩니다.",
   },
@@ -73,6 +74,7 @@ export const COMMANDS: Record<CommandKind, CommandDefinition> = {
     minCost: 12,
     maxCost: 18,
     needsPlayer: true,
+    targetPositions: ["FW"],
     effect: "중앙 슈팅과 결정적인 침투 빈도가 증가합니다.",
     tradeoff: "측면 폭과 수비 전환 참여가 줄어듭니다.",
   },
@@ -84,6 +86,7 @@ export const COMMANDS: Record<CommandKind, CommandDefinition> = {
     minCost: 12,
     maxCost: 18,
     needsPlayer: true,
+    targetPositions: ["GK", "DF", "MF", "FW"],
     effect: "선택 선수의 이후 체력 소모가 감소합니다.",
     tradeoff: "압박 범위와 공격 가담이 소폭 감소합니다.",
   },
@@ -171,6 +174,7 @@ export function calculateCommandCost(
 const updateTactic = (
   tactic: TacticState,
   kind: CommandKind,
+  attackSide?: "left" | "right",
 ): TacticState => {
   switch (kind) {
     case "PREPARED_PLAN":
@@ -197,7 +201,7 @@ const updateTactic = (
       return {
         ...tactic,
         width: Math.min(86, tactic.width + 20),
-        attackSide: tactic.attackSide === "left" ? "right" : "left",
+        attackSide: attackSide ?? tactic.attackSide,
       };
     case "CAPTAIN_RALLY":
       return {
@@ -241,6 +245,7 @@ export function applyCommand(
   kind: CommandKind,
   targetPlayerId: string | undefined,
   cost: number,
+  attackSide?: "left" | "right",
 ): MatchState {
   const definition = COMMANDS[kind];
   const target = targetPlayerId
@@ -251,6 +256,7 @@ export function applyCommand(
     kind,
     label: definition.label,
     targetPlayerId,
+    attackSide: kind === "ATTACK_WIDE" ? attackSide : undefined,
     cost,
     minute: Math.round(state.gameMinute),
     effect: definition.effect,
@@ -293,14 +299,14 @@ export function applyCommand(
     minute: Math.round(state.gameMinute),
     type: "TACTIC" as const,
     side: "home" as const,
-    text: `${target ? `${target.name}에게 ` : ""}${definition.label} 지시를 전달했습니다.`,
+    text: `${target ? `${target.name}에게 ` : ""}${definition.label}${kind === "ATTACK_WIDE" && attackSide ? `(${attackSide === "left" ? "왼쪽" : "오른쪽"})` : ""} 지시를 전달했습니다.`,
     emphasis: "important" as const,
   };
 
   return {
     ...state,
     players,
-    homeTactic: updateTactic(state.homeTactic, kind),
+    homeTactic: updateTactic(state.homeTactic, kind, attackSide),
     commands: [...state.commands, command],
     events: [event, ...state.events].slice(0, 24),
   };
@@ -311,7 +317,7 @@ const metricDelta = (
   command: AppliedCommand,
   key: keyof MatchState["metrics"],
 ): number =>
-  state.metrics[key] - (command.baseline?.metrics?.[key] ?? 0);
+  (state.metrics[key] ?? 0) - (command.baseline?.metrics?.[key] ?? 0);
 
 export function evaluateCommandImpact(
   state: Pick<MatchState, "gameMinute" | "metrics" | "homeTactic" | "players">,

@@ -51,6 +51,16 @@ describe("tactical commands", () => {
     expect(updated.commands[0].tradeoff).toContain("체력");
   });
 
+  it("applies the explicitly selected side for an attack-direction command", () => {
+    const match = createMatch(MATCH_DEFINITIONS[0], createNewCampaign());
+    const right = applyCommand(match, "ATTACK_WIDE", undefined, 30, "right");
+    const left = applyCommand(right, "ATTACK_WIDE", undefined, 30, "left");
+
+    expect(right.homeTactic.attackSide).toBe("right");
+    expect(left.homeTactic.attackSide).toBe("left");
+    expect(left.commands.at(-1)?.attackSide).toBe("left");
+  });
+
   it("measures command execution from post-command match metrics", () => {
     let match = startMatch(
       createMatch(MATCH_DEFINITIONS[0], createNewCampaign()),

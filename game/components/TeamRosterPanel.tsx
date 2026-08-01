@@ -30,6 +30,31 @@ const conditionGrade = (condition: number) => {
   return { arrow: "↓", label: "하", tone: "bottom" };
 };
 
+const positionOrder: Record<RosterPlayer["position"], number> = {
+  GK: 0,
+  DF: 1,
+  MF: 2,
+  FW: 3,
+};
+
+const sortByPosition = <T extends RosterPlayer>(players: T[]): T[] =>
+  players.slice().sort(
+    (first, second) =>
+      positionOrder[first.position] - positionOrder[second.position] ||
+      first.shirtNumber - second.shirtNumber,
+  );
+
+const reservationLabel = (
+  phase: MatchState["pendingSubstitutions"][number]["targetPhase"],
+) =>
+  phase === "HYDRATION_FIRST"
+    ? "22분 하이드레이션 적용"
+    : phase === "HALF_TIME"
+      ? "하프타임 적용"
+      : phase === "HYDRATION_SECOND"
+        ? "67분 하이드레이션 적용"
+        : "경기 재개 시 적용";
+
 const mainAbilities = (player: RosterPlayer): Array<[string, number]> =>
   player.position === "GK"
     ? [
@@ -125,8 +150,9 @@ export function TeamRosterPanel({
         (!substitutedOutIds.has(player.id) &&
           !pendingIncomingIds.has(player.id))),
   );
-  const displayedPlayers =
-    listMode === "starting" ? startingPlayers : benchPlayers;
+  const displayedPlayers = sortByPosition(
+    listMode === "starting" ? startingPlayers : benchPlayers,
+  );
   const selected =
     displayedPlayers.find((player) => player.id === selectedPlayerId) ??
     startingPlayers.find((player) => player.id === selectedPlayerId) ??
@@ -158,8 +184,8 @@ export function TeamRosterPanel({
       substitutionMode === "queue"
         ? `${outgoing.name} → ${selected.name} 교체를 예약했습니다.`
         : substitutionMode === "lineup"
-          ? `${outgoing.name} → ${selected.name} 선발 변경을 적용했습니다. 경기 시작은 별도 버튼으로 진행하세요.`
-          : `${outgoing.name} → ${selected.name} 교체만 적용했습니다. 경기 재개는 별도 버튼으로 진행하세요.`,
+          ? `${outgoing.name} → ${selected.name} 선발 변경을 적용했습니다. 경기 시작은 별도 버튼으로 진행하십시오.`
+          : `${outgoing.name} → ${selected.name} 교체만 적용했습니다. 경기 재개는 별도 버튼으로 진행하십시오.`,
     );
     onSelectPlayer(selected.id);
     setOutgoingPlayerId(undefined);
@@ -194,7 +220,7 @@ export function TeamRosterPanel({
 
       {pendingSubstitutions.length > 0 && (
         <div className="pending-substitution-list">
-          <span>경기 재개 시 적용</span>
+          <span>교체 예약</span>
           {pendingSubstitutions.map((pending) => {
             const pendingOutgoing = startingPlayers.find(
               (player) => player.id === pending.outgoingPlayerId,
@@ -207,6 +233,7 @@ export function TeamRosterPanel({
                 <strong>{pendingOutgoing?.name ?? "선발 선수"}</strong>
                 <i>→</i>
                 <strong>{pendingIncoming?.name ?? "교체 선수"}</strong>
+                <small>{reservationLabel(pending.targetPhase)}</small>
                 {onCancelSubstitution && (
                   <button
                     type="button"
@@ -232,12 +259,11 @@ export function TeamRosterPanel({
 
       <div className="roster-column-head" aria-hidden="true">
         <span>선수</span>
-        <div><b>능력</b><b>체력</b><b>컨디션</b></div>
+        <div><b>능력</b><b>컨디션</b></div>
       </div>
 
       <div className="embedded-roster-list">
         {displayedPlayers.map((player) => {
-          const stamina = player.currentStamina ?? 100;
           const condition = conditionGrade(player.condition ?? 92);
           return (
             <button
@@ -255,7 +281,6 @@ export function TeamRosterPanel({
               </span>
               <div className="roster-row-metrics">
                 <b title="종합 능력치">{player.coreAbilities.overall}</b>
-                <small title="현재 체력">체력 {Math.round(stamina)}</small>
                 {pendingOutgoingIds.has(player.id) ? (
                   <em className="is-reserved">예약</em>
                 ) : (
@@ -360,7 +385,7 @@ export function TeamRosterPanel({
                     : substitutionMode === "lineup"
                       ? `${outgoing.name} → ${selected.name} 선발 변경`
                       : `${outgoing.name} ↔ ${selected.name} 즉시 교체`
-                  : "먼저 선발 명단에서 교체 대상을 선택하세요"}
+                  : "먼저 선발 명단에서 교체 대상을 선택하십시오"}
             </button>
           )}
           {!allowSubstitution && listMode === "bench" && (

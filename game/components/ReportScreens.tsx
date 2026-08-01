@@ -3,6 +3,7 @@
 import { TEAMS } from "../data";
 import { campaignVerdict, sortedStandings } from "../engine/campaign";
 import type { CampaignState, MatchResult } from "../types";
+import { MatchStatsTable } from "./MatchStatsTable";
 
 interface ReportScreenProps {
   campaign: CampaignState;
@@ -159,6 +160,11 @@ export function ReportScreen({
               <small>관찰 가능한 문제</small>
             </div>
           </div>
+          <MatchStatsTable
+            metrics={result.metrics}
+            awayLabel={opponent.shortName}
+            compact
+          />
           <div className="causality-note">
             <span>코치 분석</span>
             <p>

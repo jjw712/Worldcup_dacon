@@ -9,6 +9,7 @@ import {
   configureTacticLoadout,
   continueMatch,
   createMatch,
+  moveHomePlayer,
   queueSubstitution,
   skipObservationSegment,
   startMatch,
@@ -90,6 +91,48 @@ describe("match engine", () => {
     expect(resumed.substitutionsUsed).toBe(1);
     expect(resumed.players.some((player) => player.id === incoming.id)).toBe(true);
     expect(resumed.events[1].text).toContain("예약 교체 적용");
+  });
+
+  it("reserves a paused substitution for the selected future break", () => {
+    const active = startMatch(
+      createMatch(MATCH_DEFINITIONS[0], createNewCampaign(333_444)),
+    );
+    const outgoing = active.players.find((player) => player.side === "home")!;
+    const startingIds = new Set(active.players.map((player) => player.id));
+    const incoming = active.homeTeam.roster.find(
+      (player) => !startingIds.has(player.id),
+    )!;
+    const queued = queueSubstitution(
+      active,
+      outgoing.id,
+      incoming.id,
+      "HALF_TIME",
+    );
+
+    const hydration = skipObservationSegment(queued);
+    const secondSegment = continueMatch(hydration);
+    expect(secondSegment.pendingSubstitutions).toHaveLength(1);
+
+    const halftime = skipObservationSegment(secondSegment);
+    const secondHalf = continueMatch(halftime);
+    expect(secondHalf.pendingSubstitutions).toHaveLength(0);
+    expect(secondHalf.players.some((player) => player.id === incoming.id)).toBe(true);
+  });
+
+  it("allows repositioning home players during halftime", () => {
+    const hydration = skipObservationSegment(
+      startMatch(createMatch(MATCH_DEFINITIONS[0], createNewCampaign())),
+    );
+    const halftime = skipObservationSegment(continueMatch(hydration));
+    const player = halftime.players.find((candidate) => candidate.side === "home")!;
+    const moved = moveHomePlayer(halftime, player.id, 0.44, 0.71);
+
+    expect(moved.players.find((candidate) => candidate.id === player.id)).toMatchObject({
+      x: 0.44,
+      y: 0.71,
+      baseX: 0.44,
+      baseY: 0.71,
+    });
   });
 
   it("replaces a pre-match starter with a bench player in the same tactical slot", () => {

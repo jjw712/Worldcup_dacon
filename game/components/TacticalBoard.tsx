@@ -14,6 +14,7 @@ interface TacticalBoardProps {
   compact?: boolean;
   selectableSide?: Side;
   focusSide?: Side;
+  highlightedPlayerIds?: string[];
   onSelectPlayer?: (playerId: string) => void;
   onMovePlayer?: (playerId: string, x: number, y: number) => void;
 }
@@ -64,6 +65,7 @@ export function TacticalBoard({
   compact = false,
   selectableSide = "home",
   focusSide,
+  highlightedPlayerIds,
   onSelectPlayer,
   onMovePlayer,
 }: TacticalBoardProps) {
@@ -76,11 +78,13 @@ export function TacticalBoard({
   const draggingPlayerId = useRef<string | null>(null);
   const latestMatch = useRef(match);
   const latestSelected = useRef(selectedPlayerId);
+  const latestHighlighted = useRef(highlightedPlayerIds);
 
   useEffect(() => {
     latestMatch.current = match;
     latestSelected.current = selectedPlayerId;
-  }, [match, selectedPlayerId]);
+    latestHighlighted.current = highlightedPlayerIds;
+  }, [highlightedPlayerIds, match, selectedPlayerId]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -269,8 +273,15 @@ export function TacticalBoard({
 
       for (const player of current.players) {
         if (!player.onField) continue;
+        const highlighted = latestHighlighted.current;
         context.globalAlpha =
-          focusSide && player.side !== focusSide ? 0.22 : 1;
+          focusSide && player.side !== focusSide
+            ? 0.22
+            : highlighted &&
+                player.side === selectableSide &&
+                !highlighted.includes(player.id)
+              ? 0.28
+              : 1;
         const existing = displayPoints.current[player.id] ?? {
           x: player.x,
           y: player.y,
@@ -312,6 +323,14 @@ export function TacticalBoard({
           context.arc(x, y, radius + 5, 0, Math.PI * 2);
           context.fillStyle = "rgba(201, 244, 89, 0.26)";
           context.fill();
+        }
+
+        if (highlighted?.includes(player.id) && !selected) {
+          context.beginPath();
+          context.arc(x, y, radius + 5, 0, Math.PI * 2);
+          context.strokeStyle = "rgba(201, 244, 89, 0.9)";
+          context.lineWidth = 2;
+          context.stroke();
         }
 
         if (personalCommand) {
@@ -412,7 +431,7 @@ export function TacticalBoard({
 
     draw();
     return () => window.cancelAnimationFrame(animationFrame);
-  }, [compact, focusSide]);
+  }, [compact, focusSide, selectableSide]);
 
   const pointerPosition = (
     event: ReactPointerEvent<HTMLCanvasElement>,
@@ -436,7 +455,10 @@ export function TacticalBoard({
   ) => {
     const point = pointerPosition(event);
     const selectablePlayers = match.players.filter(
-      (player) => player.side === selectableSide && player.onField,
+      (player) =>
+        player.side === selectableSide &&
+        player.onField &&
+        (!highlightedPlayerIds || highlightedPlayerIds.includes(player.id)),
     );
     const nearest = selectablePlayers
       .map((player) => ({

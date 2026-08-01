@@ -66,7 +66,7 @@ export const TEAMS: Record<TeamId, TeamDefinition> = {
     accent: "#d7141a",
     styleName: "제공권과 중앙 압박",
     styleDescription: "강한 체격과 제공권을 앞세워 중앙에서 주도권을 노립니다.",
-    coachHint: "장신 공격수에게 향하는 첫 패스를 끊고 세컨드 볼을 선점하세요.",
+    coachHint: "장신 공격수에게 향하는 첫 패스를 끊고 세컨드 볼을 선점하십시오.",
     formationName: GROUP_A_FORMATIONS_2026.CZE,
     defaultTactic: defaultTactic({
       pressing: 66,
@@ -85,7 +85,7 @@ export const TEAMS: Record<TeamId, TeamDefinition> = {
     accent: "#f7f3e8",
     styleName: "측면 수적 우위",
     styleDescription: "높은 점유율과 빠른 패스로 측면에서 수적 우위를 만듭니다.",
-    coachHint: "공을 빼앗은 직후 상대 풀백 뒤 공간을 빠르게 공략하세요.",
+    coachHint: "공을 빼앗은 직후 상대 풀백 뒤 공간을 빠르게 공략하십시오.",
     formationName: GROUP_A_FORMATIONS_2026.MEX,
     defaultTactic: defaultTactic({
       pressing: 60,
@@ -104,7 +104,7 @@ export const TEAMS: Record<TeamId, TeamDefinition> = {
     accent: "#007749",
     styleName: "속도와 역습",
     styleDescription: "빠른 측면 공격수와 직선적인 전환으로 뒷공간을 노립니다.",
-    coachHint: "공격 시 뒤에 충분한 숫자를 남기고 역습 출발점을 먼저 차단하세요.",
+    coachHint: "공격 시 뒤에 충분한 숫자를 남기고 역습 출발점을 먼저 차단하십시오.",
     formationName: GROUP_A_FORMATIONS_2026.RSA,
     defaultTactic: defaultTactic({
       pressing: 43,
@@ -123,11 +123,11 @@ export const MATCH_DEFINITIONS: MatchDefinition[] = [
     round: 1,
     opponentId: "CZE",
     title: "첫 번째 작전 · 체코의 높이를 넘어라",
-    challenge: "제공권과 세컨드 볼이 강한 체코의 중앙 공격을 통제하세요.",
+    challenge: "제공권과 세컨드 볼이 강한 체코의 중앙 공격을 통제하십시오.",
     briefing: [
       "체코는 장신 공격수와 미드필더의 박스 침투가 위협적입니다.",
       "무리한 전방 압박은 한 번의 롱패스로 수비 라인을 노출시킬 수 있습니다.",
-      "공을 되찾으면 풀백 뒤 공간으로 빠르게 방향을 전환하세요.",
+      "공을 되찾으면 풀백 뒤 공간으로 빠르게 방향을 전환하십시오.",
     ],
     seed: 1101,
     weather: "고온",
@@ -165,7 +165,7 @@ export const MATCH_DEFINITIONS: MatchDefinition[] = [
     round: 3,
     opponentId: "RSA",
     title: "마지막 작전 · 역습의 속도를 잠가라",
-    challenge: "남아공의 빠른 측면 역습을 막고 필요한 조별 순위를 확보하세요.",
+    challenge: "남아공의 빠른 측면 역습을 막고 필요한 조별 순위를 확보하십시오.",
     briefing: [
       "남아공은 낮은 위치에서 공을 되찾은 뒤 빠르게 측면으로 전진합니다.",
       "풀백이 동시에 전진하면 수비 전환 때 넓은 공간을 내줄 수 있습니다.",

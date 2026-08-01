@@ -10,11 +10,14 @@ import {
 import { averageTeamStamina } from "../engine/matchEngine";
 import { calculateBreakRemaining } from "../engine/timer";
 import type {
+  AttackSide,
   CommandKind,
   MatchPlayer,
   MatchPhase,
   MatchState,
+  Position,
 } from "../types";
+import { MatchStatsTable } from "./MatchStatsTable";
 import { PlayerComparisonDialog } from "./PlayerComparisonDialog";
 import { TacticalBoard } from "./TacticalBoard";
 import { TeamRosterPanel } from "./TeamRosterPanel";
@@ -28,6 +31,14 @@ const PHASE_LABELS: Partial<Record<MatchPhase, string>> = {
 };
 
 const DELIVERY_ANIMATION_MS = 800;
+
+const eventIcon = (type: MatchState["events"][number]["type"]) => {
+  if (type === "GOAL") return "⚽";
+  if (type === "CARD") return "▰";
+  if (type === "SUBSTITUTION") return "⇄";
+  if (type === "CORNER") return "⚑";
+  return undefined;
+};
 
 const footLabel = {
   LEFT: "왼발",
@@ -259,6 +270,15 @@ interface ObservationScreenProps {
   onPlaybackSpeedChange: (speed: 1 | 2 | 4) => void;
   onPauseChange: (paused: boolean) => void;
   onSubstitute: (outgoingPlayerId: string, incomingPlayerId: string) => void;
+  onQueueSubstitution?: (
+    outgoingPlayerId: string,
+    incomingPlayerId: string,
+    targetPhase: Extract<
+      MatchPhase,
+      "HYDRATION_FIRST" | "HALF_TIME" | "HYDRATION_SECOND"
+    >,
+  ) => void;
+  onCancelSubstitution?: (pendingId: string) => void;
   onSwitchSubTactic: (slot: "sub1" | "sub2") => void;
   onSkipToDecision: () => void;
 }
@@ -274,6 +294,8 @@ export function ObservationScreen({
   onPlaybackSpeedChange,
   onPauseChange,
   onSubstitute,
+  onQueueSubstitution,
+  onCancelSubstitution,
   onSwitchSubTactic,
   onSkipToDecision,
 }: ObservationScreenProps) {
@@ -285,6 +307,17 @@ export function ObservationScreen({
   const [pauseTool, setPauseTool] = useState<"substitution" | "tactic">(
     "substitution",
   );
+  const [pauseSubMode, setPauseSubMode] = useState<"immediate" | "queue">(
+    "immediate",
+  );
+  const nextBreak =
+    match.phase === "OBSERVE_0_22"
+      ? ({ phase: "HYDRATION_FIRST", label: "22분 하이드레이션" } as const)
+      : match.phase === "OBSERVE_22_45"
+        ? ({ phase: "HALF_TIME", label: "하프타임" } as const)
+        : match.phase === "OBSERVE_45_67"
+          ? ({ phase: "HYDRATION_SECOND", label: "67분 하이드레이션" } as const)
+          : undefined;
   const selectedPlayer = match.players.find(
     (player) => player.id === selectedPlayerId,
   );
@@ -386,9 +419,14 @@ export function ObservationScreen({
               {match.events.slice(0, 9).map((event) => (
                 <article
                   key={event.id}
-                  className={`event-row emphasis-${event.emphasis ?? "normal"}`}
+                  className={`event-row event-${event.type.toLowerCase()} emphasis-${event.emphasis ?? "normal"}`}
                 >
                   <time>{event.minute}′</time>
+                  {eventIcon(event.type) && (
+                    <span className="event-icon" aria-hidden="true">
+                      {eventIcon(event.type)}
+                    </span>
+                  )}
                   <p>{event.text}</p>
                 </article>
               ))}
@@ -484,9 +522,6 @@ export function ObservationScreen({
                   %
                 </b>
               </span>
-              <span>
-                평균 체력 <b>{Math.round(averageTeamStamina(match))}</b>
-              </span>
             </div>
           </div>
           <TacticalBoard
@@ -497,8 +532,8 @@ export function ObservationScreen({
           {isPaused && (
             <div className="match-paused-overlay" role="status">
               <span>경기 중지</span>
-              <strong>시뮬레이션 시간이 멈췄습니다.</strong>
-              <small>오른쪽에서 선수를 즉시 교체하거나 경기를 재개하세요.</small>
+              <strong>전술과 교체를 정비하십시오.</strong>
+              <small>오른쪽 패널에서 변경한 뒤 경기를 재개하십시오.</small>
             </div>
           )}
           <div className="board-legend">
@@ -550,16 +585,46 @@ export function ObservationScreen({
                 </button>
               </div>
               {pauseTool === "substitution" ? (
-                <TeamRosterPanel
-                  match={match}
-                  side="home"
-                  selectedPlayerId={selectedPlayerId}
-                  onSelectPlayer={onSelectPlayer}
-                  allowSubstitution
-                  substitutionMode="immediate"
-                  onSubstitute={onSubstitute}
-                  onComparePlayer={setCompareBasePlayerId}
-                />
+                <>
+                  <div className="substitution-timing-toggle">
+                    <button
+                      type="button"
+                      className={pauseSubMode === "immediate" ? "is-active" : ""}
+                      onClick={() => setPauseSubMode("immediate")}
+                    >
+                      즉시 교체
+                    </button>
+                    <button
+                      type="button"
+                      className={pauseSubMode === "queue" ? "is-active" : ""}
+                      disabled={!nextBreak}
+                      onClick={() => setPauseSubMode("queue")}
+                    >
+                      {nextBreak ? `${nextBreak.label} 예약` : "예약 구간 없음"}
+                    </button>
+                  </div>
+                  <TeamRosterPanel
+                    match={match}
+                    side="home"
+                    selectedPlayerId={selectedPlayerId}
+                    onSelectPlayer={onSelectPlayer}
+                    allowSubstitution
+                    substitutionMode={pauseSubMode}
+                    onSubstitute={(outgoingPlayerId, incomingPlayerId) => {
+                      if (pauseSubMode === "queue" && nextBreak) {
+                        onQueueSubstitution?.(
+                          outgoingPlayerId,
+                          incomingPlayerId,
+                          nextBreak.phase,
+                        );
+                      } else {
+                        onSubstitute(outgoingPlayerId, incomingPlayerId);
+                      }
+                    }}
+                    onCancelSubstitution={onCancelSubstitution}
+                    onComparePlayer={setCompareBasePlayerId}
+                  />
+                </>
               ) : (
                 <SubTacticSwitcher
                   match={match}
@@ -693,6 +758,84 @@ export function ObservationScreen({
   );
 }
 
+export function BreakTransitionScreen({
+  match,
+  onContinue,
+}: {
+  match: MatchState;
+  onContinue: () => void;
+}) {
+  const isHalfTime = match.phase === "HALF_TIME";
+  const title = isHalfTime
+    ? "전반전이 종료되었습니다."
+    : `${match.phase === "HYDRATION_FIRST" ? "전반" : "후반"} 하이드레이션 브레이크입니다.`;
+  return (
+    <main className="phase-transition-shell">
+      <section>
+        <span>{isHalfTime ? "HALF TIME" : "HYDRATION BREAK"}</span>
+        <div className="transition-score">
+          <strong>KOR</strong>
+          <b>{match.score.home}</b>
+          <i>:</i>
+          <b>{match.score.away}</b>
+          <strong>{match.awayTeam.shortName}</strong>
+        </div>
+        <h1>{title}</h1>
+        <p>
+          {isHalfTime
+            ? "전반 통계를 확인한 뒤 전술, 포지션, 교체 계획을 정비하십시오."
+            : "현재 흐름을 확인한 뒤 제한 시간 안에 지시와 교체 계획을 정비하십시오."}
+        </p>
+        <button className="button button-primary" onClick={onContinue}>
+          {isHalfTime ? "하프타임 전술실 입장" : "브레이크 전술실 입장"}
+          <span aria-hidden="true">→</span>
+        </button>
+      </section>
+    </main>
+  );
+}
+
+export function FullTimeScreen({
+  match,
+  onContinue,
+}: {
+  match: MatchState;
+  onContinue: () => void;
+}) {
+  return (
+    <main className="fulltime-shell">
+      <header>
+        <span className="brand-mark">잠.물.마</span>
+        <b>FULL TIME</b>
+      </header>
+      <section className="fulltime-content">
+        <div className="fulltime-score">
+          <span>KOR</span>
+          <strong>{match.score.home}</strong>
+          <i>:</i>
+          <strong>{match.score.away}</strong>
+          <span>{match.awayTeam.shortName}</span>
+        </div>
+        <div>
+          <p className="eyebrow">MATCH SUMMARY</p>
+          <h1>경기가 종료되었습니다.</h1>
+          <p className="fulltime-lead">
+            최종 기록을 확인한 뒤 감독 평가로 이동하십시오.
+          </p>
+          <MatchStatsTable
+            metrics={match.metrics}
+            awayLabel={match.awayTeam.shortName}
+          />
+          <button className="button button-primary button-wide" onClick={onContinue}>
+            감독 평가 확인
+            <span aria-hidden="true">→</span>
+          </button>
+        </div>
+      </section>
+    </main>
+  );
+}
+
 interface HydrationScreenProps {
   match: MatchState;
   memo: string;
@@ -701,6 +844,7 @@ interface HydrationScreenProps {
     targetPlayerId: string | undefined,
     cost: number,
     randomState: number,
+    attackSide?: Exclude<AttackSide, "center">,
   ) => void;
   onQueueSubstitution: (
     outgoingPlayerId: string,
@@ -723,6 +867,13 @@ export function HydrationScreen({
   const [selectedPlayerId, setSelectedPlayerId] = useState<string>();
   const [detailPlayerId, setDetailPlayerId] = useState<string>();
   const [selectedCommand, setSelectedCommand] = useState<CommandKind>();
+  const [attackDirection, setAttackDirection] = useState<
+    Exclude<AttackSide, "center"> | undefined
+  >(undefined);
+  const [positionFilter, setPositionFilter] = useState<"ALL" | Position>(
+    "ALL",
+  );
+  const [deliveredKinds, setDeliveredKinds] = useState<CommandKind[]>([]);
   const [breakTool, setBreakTool] = useState<
     "commands" | "roster" | "tactics"
   >(
@@ -740,6 +891,7 @@ export function HydrationScreen({
     targetPlayerId?: string;
     cost: number;
     randomState: number;
+    attackSide?: Exclude<AttackSide, "center">;
     startedAt: number;
   }>();
   const [message, setMessage] = useState(
@@ -779,6 +931,12 @@ export function HydrationScreen({
     : undefined;
   const homePlayers = match.players.filter(
     (player) => player.side === "home" && player.onField,
+  );
+  const allowedPositions = definition?.targetPositions;
+  const eligiblePlayers = homePlayers.filter(
+    (player) =>
+      (!allowedPositions || allowedPositions.includes(player.position)) &&
+      (positionFilter === "ALL" || player.position === positionFilter),
   );
   const averageUnderstanding =
     homePlayers.reduce(
@@ -822,6 +980,7 @@ export function HydrationScreen({
       pendingDelivery.targetPlayerId,
       pendingDelivery.cost,
       pendingDelivery.randomState,
+      pendingDelivery.attackSide,
     );
     const deliveredDefinition = COMMANDS[pendingDelivery.kind];
     const target = match.players.find(
@@ -831,6 +990,11 @@ export function HydrationScreen({
       `${target ? `${target.name}에게 ` : ""}${deliveredDefinition.label} 전달 완료 · ${pendingDelivery.cost}초 소요`,
     );
     setPendingDelivery(undefined);
+    setDeliveredKinds((current) =>
+      current.includes(pendingDelivery.kind)
+        ? current
+        : [...current, pendingDelivery.kind],
+    );
     setSelectedCommand(undefined);
   }, [
     deliveryProgress,
@@ -846,6 +1010,10 @@ export function HydrationScreen({
     }
     if (definition.needsPlayer && !selectedPlayer) {
       setMessage("이 지시를 전달할 선수를 전술판에서 선택하십시오.");
+      return;
+    }
+    if (definition.kind === "ATTACK_WIDE" && !attackDirection) {
+      setMessage("공격할 측면을 왼쪽 또는 오른쪽으로 지정하십시오.");
       return;
     }
     if (!briefingReady || pendingDelivery) return;
@@ -864,6 +1032,8 @@ export function HydrationScreen({
       targetPlayerId: definition.needsPlayer ? selectedPlayer?.id : undefined,
       cost: result.cost,
       randomState: result.randomState,
+      attackSide:
+        definition.kind === "ATTACK_WIDE" ? attackDirection : undefined,
       startedAt: now,
     });
     setMessage(
@@ -1004,13 +1174,42 @@ export function HydrationScreen({
               </div>
             )}
           </div>
+          <div className="position-filter" aria-label="선수 포지션 필터">
+            {(["ALL", "GK", "DF", "MF", "FW"] as const).map((position) => {
+              const unavailable =
+                position !== "ALL" &&
+                Boolean(allowedPositions && !allowedPositions.includes(position));
+              return (
+                <button
+                  type="button"
+                  key={position}
+                  disabled={unavailable || !definition?.needsPlayer}
+                  className={positionFilter === position ? "is-active" : ""}
+                  onClick={() => {
+                    setPositionFilter(position);
+                    setSelectedPlayerId(undefined);
+                  }}
+                >
+                  {position === "ALL" ? "전체" : position}
+                </button>
+              );
+            })}
+          </div>
           <TacticalBoard
             match={match}
             selectedPlayerId={selectedPlayerId}
-            onSelectPlayer={setSelectedPlayerId}
+            highlightedPlayerIds={
+              definition?.needsPlayer
+                ? eligiblePlayers.map((player) => player.id)
+                : undefined
+            }
+            onSelectPlayer={(playerId) => {
+              if (!definition?.needsPlayer) return;
+              setSelectedPlayerId(playerId);
+            }}
           />
           <div className="break-player-chips">
-            {homePlayers.map((player) => (
+            {(definition?.needsPlayer ? eligiblePlayers : homePlayers).map((player) => (
               <button
                 key={player.id}
                 className={selectedPlayerId === player.id ? "is-selected" : ""}
@@ -1060,15 +1259,29 @@ export function HydrationScreen({
             {BREAK_COMMAND_KINDS.map((kind) => {
               const command = COMMANDS[kind];
               const unavailable = remaining < command.minCost;
+              const delivered = deliveredKinds.includes(kind);
               return (
                 <button
                   key={kind}
                   disabled={unavailable || Boolean(pendingDelivery)}
-                  className={selectedCommand === kind ? "is-selected" : ""}
-                  onClick={() => setSelectedCommand(kind)}
+                  className={`${selectedCommand === kind ? "is-selected" : ""} ${delivered ? "is-delivered" : ""}`}
+                  onClick={() => {
+                    const next = selectedCommand === kind ? undefined : kind;
+                    setSelectedCommand(next);
+                    setSelectedPlayerId(undefined);
+                    setPositionFilter(
+                      next && COMMANDS[next].needsPlayer
+                        ? (COMMANDS[next].targetPositions?.[0] ?? "ALL")
+                        : "ALL",
+                    );
+                    if (next !== "ATTACK_WIDE") setAttackDirection(undefined);
+                  }}
                 >
                   <span>
-                    <small>{command.category}</small>
+                    <small>
+                      {command.needsPlayer ? "개별 지시" : "팀 전체 지시"}
+                      {delivered ? " · 전달 완료" : ""}
+                    </small>
                     <strong>{command.label}</strong>
                     <em>{command.effect}</em>
                   </span>
@@ -1089,6 +1302,27 @@ export function HydrationScreen({
                   <small>효과 · {definition.effect}</small>
                   <small>대가 · {definition.tradeoff}</small>
                 </div>
+                {definition.kind === "ATTACK_WIDE" && (
+                  <div className="attack-direction-picker">
+                    <span>공격 방향을 지정하십시오</span>
+                    <div>
+                      <button
+                        type="button"
+                        className={attackDirection === "left" ? "is-active" : ""}
+                        onClick={() => setAttackDirection("left")}
+                      >
+                        ← 왼쪽 측면
+                      </button>
+                      <button
+                        type="button"
+                        className={attackDirection === "right" ? "is-active" : ""}
+                        onClick={() => setAttackDirection("right")}
+                      >
+                        오른쪽 측면 →
+                      </button>
+                    </div>
+                  </div>
+                )}
                 {definition.needsPlayer && (
                   <label className="command-target-select">
                     <span>대상 선수</span>
@@ -1099,8 +1333,8 @@ export function HydrationScreen({
                       }
                       disabled={Boolean(pendingDelivery)}
                     >
-                      <option value="">선수를 선택하세요</option>
-                      {homePlayers.map((player) => (
+                      <option value="">선수를 선택하십시오</option>
+                      {eligiblePlayers.map((player) => (
                         <option key={player.id} value={player.id}>
                           {player.number}. {player.name} · {player.detailedPosition}
                         </option>
@@ -1125,6 +1359,7 @@ export function HydrationScreen({
                 !briefingReady ||
                 Boolean(pendingDelivery) ||
                 (definition.needsPlayer && !selectedPlayer)
+                || (definition.kind === "ATTACK_WIDE" && !attackDirection)
               }
             >
               {pendingDelivery ? "전달 중" : "전달하기"}
@@ -1244,6 +1479,7 @@ interface HalfTimeScreenProps {
     kind: CommandKind,
     targetPlayerId?: string,
     cost?: number,
+    attackSide?: Exclude<AttackSide, "center">,
   ) => void;
   onRecovery: () => void;
   onQueueSubstitution: (
@@ -1252,6 +1488,7 @@ interface HalfTimeScreenProps {
   ) => void;
   onCancelSubstitution: (pendingId: string) => void;
   onSwitchSubTactic: (slot: "sub1" | "sub2") => void;
+  onMovePlayer: (playerId: string, x: number, y: number) => void;
   onContinue: () => void;
 }
 
@@ -1262,10 +1499,11 @@ export function HalfTimeScreen({
   onQueueSubstitution,
   onCancelSubstitution,
   onSwitchSubTactic,
+  onMovePlayer,
   onContinue,
 }: HalfTimeScreenProps) {
   const [remainingAp, setRemainingAp] = useState(10);
-  const [usedActions, setUsedActions] = useState<string[]>([]);
+  const [selectedActions, setSelectedActions] = useState<string[]>([]);
   const [halftimeView, setHalftimeView] = useState<
     "actions" | "players" | "tactics"
   >(
@@ -1284,13 +1522,33 @@ export function HalfTimeScreen({
       ),
     [match.players],
   );
+  const winger = useMemo(
+    () =>
+      match.players.find(
+        (player) =>
+          player.side === "home" &&
+          player.onField &&
+          (player.detailedPosition === "LW" ||
+            player.detailedPosition === "RW" ||
+            player.detailedPosition === "LM" ||
+            player.detailedPosition === "RM"),
+      ) ?? forward,
+    [forward, match.players],
+  );
+  const lowestStamina = useMemo(
+    () =>
+      match.players
+        .filter((player) => player.side === "home" && player.onField)
+        .sort((a, b) => a.currentStamina - b.currentStamina)[0],
+    [match.players],
+  );
   const actions = [
     {
       id: "adjust",
-      label: "기존 전술 미세 조정",
-      detail: "공격 폭과 방향 조정",
+      label: "오른쪽 측면 전환",
+      detail: "오른쪽 폭을 넓혀 공격 방향을 전환하십시오.",
       cost: 2,
-      run: () => onApplyCommand("ATTACK_WIDE", undefined, 0),
+      run: () => onApplyCommand("ATTACK_WIDE", undefined, 0, "right"),
     },
     {
       id: "individual",
@@ -1313,13 +1571,54 @@ export function HalfTimeScreen({
       cost: 5,
       run: () => onApplyCommand("CAPTAIN_RALLY", undefined, 0),
     },
+    {
+      id: "press",
+      label: "전방 압박 강화",
+      detail: "상대 진영부터 공을 되찾도록 지시하십시오.",
+      cost: 2,
+      run: () => onApplyCommand("PRESS_HIGHER", undefined, 0),
+    },
+    {
+      id: "lower",
+      label: "수비 라인 조정",
+      detail: "수비 기준선을 내려 뒷공간을 보호하십시오.",
+      cost: 2,
+      run: () => onApplyCommand("LOWER_LINE", undefined, 0),
+    },
+    {
+      id: "track",
+      label: "윙어 수비 가담",
+      detail: `${winger?.name ?? "측면 선수"}에게 풀백 추적을 지시하십시오.`,
+      cost: 2,
+      run: () => onApplyCommand("WINGER_TRACK", winger?.id, 0),
+    },
+    {
+      id: "conserve",
+      label: "개인 체력 안배",
+      detail: `${lowestStamina?.name ?? "체력 저하 선수"}의 움직임을 조절하십시오.`,
+      cost: 1,
+      run: () => onApplyCommand("CONSERVE_ENERGY", lowestStamina?.id, 0),
+    },
   ];
 
   const handleAction = (action: (typeof actions)[number]) => {
-    if (remainingAp < action.cost || usedActions.includes(action.id)) return;
-    action.run();
+    if (selectedActions.includes(action.id)) {
+      setRemainingAp((current) => current + action.cost);
+      setSelectedActions((current) =>
+        current.filter((actionId) => actionId !== action.id),
+      );
+      return;
+    }
+    if (remainingAp < action.cost) return;
     setRemainingAp((current) => current - action.cost);
-    setUsedActions((current) => [...current, action.id]);
+    setSelectedActions((current) => [...current, action.id]);
+  };
+
+  const commitHalfTime = () => {
+    actions
+      .filter((action) => selectedActions.includes(action.id))
+      .forEach((action) => action.run());
+    onContinue();
   };
 
   const switchHalfTimeTactic = (slot: "sub1" | "sub2") => {
@@ -1364,10 +1663,21 @@ export function HalfTimeScreen({
             }
             selectableSide={rosterSide}
             focusSide={halftimeView === "players" ? rosterSide : undefined}
+            editable={halftimeView === "players" && rosterSide === "home"}
             onSelectPlayer={
               halftimeView === "players" ? setRosterPlayerId : undefined
             }
+            onMovePlayer={
+              halftimeView === "players" && rosterSide === "home"
+                ? onMovePlayer
+                : undefined
+            }
           />
+          {halftimeView === "players" && rosterSide === "home" && (
+            <p className="halftime-position-note">
+              선수를 드래그하여 후반전 위치를 조정하십시오.
+            </p>
+          )}
           <div className="halftime-metrics">
             <div>
               <span>패스 성공</span>
@@ -1407,7 +1717,7 @@ export function HalfTimeScreen({
               className={halftimeView === "players" ? "is-active" : ""}
               onClick={() => setHalftimeView("players")}
             >
-              선수 정보
+              선수·포지션
             </button>
             <button
               type="button"
@@ -1427,15 +1737,17 @@ export function HalfTimeScreen({
               </div>
               <div className="ap-action-grid">
                 {actions.map((action) => {
-                  const used = usedActions.includes(action.id);
+                  const used = selectedActions.includes(action.id);
                   return (
                     <button
                       key={action.id}
-                      disabled={remainingAp < action.cost || used}
+                      disabled={!used && remainingAp < action.cost}
                       className={used ? "is-used" : ""}
                       onClick={() => handleAction(action)}
                     >
-                      <span>{used ? "적용 완료" : `${action.cost} AP`}</span>
+                      <span>
+                        {used ? "선택됨 · 재클릭하여 취소" : `${action.cost} AP`}
+                      </span>
                       <strong>{action.label}</strong>
                       <p>{action.detail}</p>
                     </button>
@@ -1490,9 +1802,9 @@ export function HalfTimeScreen({
           )}
           <button
             className="button button-primary button-wide"
-            onClick={onContinue}
+            onClick={commitHalfTime}
           >
-            후반전 시작
+            선택 적용 후 후반전 시작
             <span aria-hidden="true">→</span>
           </button>
         </div>

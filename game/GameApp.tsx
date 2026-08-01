@@ -8,6 +8,8 @@ import {
   PreMatchScreen,
 } from "./components/SetupScreens";
 import {
+  BreakTransitionScreen,
+  FullTimeScreen,
   HalfTimeScreen,
   HydrationScreen,
   ObservationScreen,
@@ -46,6 +48,7 @@ type AppScreen =
   | "campaign"
   | "prematch"
   | "match"
+  | "fulltime"
   | "report"
   | "final";
 
@@ -69,7 +72,9 @@ export function GameApp() {
   const [memo, setMemo] = useState("");
   const [playbackSpeed, setPlaybackSpeed] = useState<1 | 2 | 4>(1);
   const [isPaused, setIsPaused] = useState(false);
-  const handledFinishedMatch = useRef<string>();
+  const [acknowledgedBreakPhase, setAcknowledgedBreakPhase] =
+    useState<MatchState["phase"] | undefined>(undefined);
+  const handledFinishedMatch = useRef<string | undefined>(undefined);
 
   useEffect(() => {
     let parsedCampaign: CampaignState | undefined;
@@ -132,7 +137,7 @@ export function GameApp() {
     const updatedCampaign = applyMatchResult(campaign, result);
     setCampaign(updatedCampaign);
     setLastResult(result);
-    setScreen("report");
+    setScreen("fulltime");
   }, [campaign, match, screen]);
 
   const beginNewCampaign = () => {
@@ -142,6 +147,7 @@ export function GameApp() {
     setLastResult(undefined);
     setMemo("");
     setIsPaused(false);
+    setAcknowledgedBreakPhase(undefined);
     handledFinishedMatch.current = undefined;
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(fresh));
     setScreen("campaign");
@@ -161,6 +167,7 @@ export function GameApp() {
     setMatch(newMatch);
     setMemo("");
     setIsPaused(false);
+    setAcknowledgedBreakPhase(undefined);
     setSelectedPlayerId(undefined);
     handledFinishedMatch.current = undefined;
     setScreen("prematch");
@@ -178,10 +185,17 @@ export function GameApp() {
       targetPlayerId?: string,
       cost = 0,
       randomState?: number,
+      attackSide?: "left" | "right",
     ) => {
       setMatch((current) => {
         if (!current) return current;
-        const updated = applyCommand(current, kind, targetPlayerId, cost);
+        const updated = applyCommand(
+          current,
+          kind,
+          targetPlayerId,
+          cost,
+          attackSide,
+        );
         return randomState === undefined
           ? updated
           : { ...updated, randomState };
@@ -259,6 +273,19 @@ export function GameApp() {
 
   if (screen === "match" && match) {
     if (
+      (match.phase === "HYDRATION_FIRST" ||
+        match.phase === "HALF_TIME" ||
+        match.phase === "HYDRATION_SECOND") &&
+      acknowledgedBreakPhase !== match.phase
+    ) {
+      return (
+        <BreakTransitionScreen
+          match={match}
+          onContinue={() => setAcknowledgedBreakPhase(match.phase)}
+        />
+      );
+    }
+    if (
       match.phase === "HYDRATION_FIRST" ||
       match.phase === "HYDRATION_SECOND"
     ) {
@@ -267,8 +294,14 @@ export function GameApp() {
           key={match.phase}
           match={match}
           memo={memo}
-          onApplyCommand={(kind, playerId, cost, randomState) =>
-            applyTacticalCommand(kind, playerId, cost, randomState)
+          onApplyCommand={(kind, playerId, cost, randomState, attackSide) =>
+            applyTacticalCommand(
+              kind,
+              playerId,
+              cost,
+              randomState,
+              attackSide,
+            )
           }
           onQueueSubstitution={(outgoingPlayerId, incomingPlayerId) =>
             setMatch((current) =>
@@ -296,7 +329,9 @@ export function GameApp() {
       return (
         <HalfTimeScreen
           match={match}
-          onApplyCommand={applyTacticalCommand}
+          onApplyCommand={(kind, playerId, cost, attackSide) =>
+            applyTacticalCommand(kind, playerId, cost, undefined, attackSide)
+          }
           onRecovery={() =>
             setMatch((current) =>
               current ? applyHalfTimeRecovery(current) : current,
@@ -317,6 +352,11 @@ export function GameApp() {
           onSwitchSubTactic={(slot) =>
             setMatch((current) =>
               current ? switchToSubTactic(current, slot) : current,
+            )
+          }
+          onMovePlayer={(playerId, x, y) =>
+            setMatch((current) =>
+              current ? moveHomePlayer(current, playerId, x, y) : current,
             )
           }
           onContinue={resumeMatch}
@@ -350,6 +390,23 @@ export function GameApp() {
               : current,
           )
         }
+        onQueueSubstitution={(outgoingPlayerId, incomingPlayerId, targetPhase) =>
+          setMatch((current) =>
+            current
+              ? queueSubstitution(
+                  current,
+                  outgoingPlayerId,
+                  incomingPlayerId,
+                  targetPhase,
+                )
+              : current,
+          )
+        }
+        onCancelSubstitution={(pendingId) =>
+          setMatch((current) =>
+            current ? cancelPendingSubstitution(current, pendingId) : current,
+          )
+        }
         onSwitchSubTactic={(slot) =>
           setMatch((current) =>
             current ? switchToSubTactic(current, slot) : current,
@@ -362,6 +419,10 @@ export function GameApp() {
         }
       />
     );
+  }
+
+  if (screen === "fulltime" && match) {
+    return <FullTimeScreen match={match} onContinue={() => setScreen("report")} />;
   }
 
   if (screen === "report" && lastResult) {

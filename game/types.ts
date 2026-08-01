@@ -24,7 +24,10 @@ export type TacticPresetId =
   | "CONTROL_4231"
   | "COUNTER_442"
   | "PRESS_343"
-  | "BLOCK_541";
+  | "BLOCK_541"
+  | "BUILD_352"
+  | "SHADOW_3421"
+  | "COMPACT_4141";
 
 export type MatchPhase =
   | "PRE_MATCH"
@@ -170,7 +173,15 @@ export interface MatchPlayer extends RosterPlayer {
 }
 
 export interface TacticState {
-  formation: "4-3-3" | "4-2-3-1" | "4-4-2" | "3-4-3" | "5-4-1";
+  formation:
+    | "4-3-3"
+    | "4-2-3-1"
+    | "4-4-2"
+    | "3-4-3"
+    | "5-4-1"
+    | "3-5-2"
+    | "3-4-2-1"
+    | "4-1-4-1";
   presetId?: TacticPresetId;
   pressing: number;
   defensiveLine: number;
@@ -229,6 +240,8 @@ export type MatchEventType =
   | "GOAL"
   | "FOUL"
   | "CARD"
+  | "SUBSTITUTION"
+  | "CORNER"
   | "INJURY"
   | "TACTIC";
 
@@ -261,6 +274,16 @@ export interface MatchMetrics {
   homeRightThreat: number;
   awayRightThreat: number;
   tacticalWins: number;
+  homeShotsOnTarget?: number;
+  awayShotsOnTarget?: number;
+  homeFouls?: number;
+  awayFouls?: number;
+  homeCards?: number;
+  awayCards?: number;
+  homeCorners?: number;
+  awayCorners?: number;
+  homePossessionSeconds?: number;
+  awayPossessionSeconds?: number;
 }
 
 export interface AppliedCommand {
@@ -268,6 +291,7 @@ export interface AppliedCommand {
   kind: CommandKind;
   label: string;
   targetPlayerId?: string;
+  attackSide?: AttackSide;
   cost: number;
   minute: number;
   effect: string;
@@ -296,6 +320,10 @@ export interface PendingSubstitution {
   incomingPlayerId: string;
   requestedPhase: MatchPhase;
   requestedMinute: number;
+  targetPhase?: Extract<
+    MatchPhase,
+    "HYDRATION_FIRST" | "HALF_TIME" | "HYDRATION_SECOND"
+  >;
 }
 
 export interface TacticLoadout {
@@ -376,6 +404,7 @@ export interface CommandDefinition {
   minCost: number;
   maxCost: number;
   needsPlayer: boolean;
+  targetPositions?: Position[];
   effect: string;
   tradeoff: string;
 }
