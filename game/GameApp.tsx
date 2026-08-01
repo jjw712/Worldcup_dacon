@@ -34,25 +34,24 @@ import {
   startMatch,
   substitutePausedPlayer,
   substitutePreMatchPlayer,
+  swapHomePlayerPositions,
   switchToSubTactic,
 } from "./engine/matchEngine";
+import {
+  parseSavedSession,
+  type AppScreen,
+  type SavedSession,
+} from "./sessionStorage";
 import type {
+  AttackSide,
   CampaignState,
   CommandKind,
   MatchResult,
   MatchState,
 } from "./types";
 
-type AppScreen =
-  | "landing"
-  | "campaign"
-  | "prematch"
-  | "match"
-  | "fulltime"
-  | "report"
-  | "final";
-
 const STORAGE_KEY = "jammulma-campaign-v4";
+const SESSION_STORAGE_KEY = "jammulma-session-v1";
 const OBSERVATION_PHASES = new Set([
   "OBSERVE_0_22",
   "OBSERVE_22_45",
@@ -65,6 +64,7 @@ export function GameApp() {
   const [campaign, setCampaign] = useState<CampaignState>(() =>
     createNewCampaign(),
   );
+  const [campaignStarted, setCampaignStarted] = useState(false);
   const [storageReady, setStorageReady] = useState(false);
   const [match, setMatch] = useState<MatchState>();
   const [lastResult, setLastResult] = useState<MatchResult>();
@@ -72,13 +72,21 @@ export function GameApp() {
   const [memo, setMemo] = useState("");
   const [playbackSpeed, setPlaybackSpeed] = useState<1 | 2 | 4>(1);
   const [isPaused, setIsPaused] = useState(false);
+  const [goalEvent, setGoalEvent] = useState<MatchState["events"][number]>();
   const [acknowledgedBreakPhase, setAcknowledgedBreakPhase] =
     useState<MatchState["phase"] | undefined>(undefined);
   const handledFinishedMatch = useRef<string | undefined>(undefined);
+  const handledGoalEvent = useRef<string | undefined>(undefined);
+  const goalPauseActive = useRef(false);
+  const goalPauseTimer = useRef<number | undefined>(undefined);
 
   useEffect(() => {
     let parsedCampaign: CampaignState | undefined;
+    let parsedSession: SavedSession | undefined;
     try {
+      parsedSession = parseSavedSession(
+        window.localStorage.getItem(SESSION_STORAGE_KEY),
+      );
       const saved = window.localStorage.getItem(STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved) as CampaignState;
@@ -88,10 +96,30 @@ export function GameApp() {
       }
     } catch {
       window.localStorage.removeItem(STORAGE_KEY);
+      window.localStorage.removeItem(SESSION_STORAGE_KEY);
     }
     const timer = window.setTimeout(() => {
-      if (parsedCampaign) {
+      if (parsedSession) {
+        setScreen(parsedSession.screen);
+        setCampaign(parsedSession.campaign);
+        setCampaignStarted(parsedSession.campaignStarted);
+        setMatch(parsedSession.match);
+        setLastResult(parsedSession.lastResult);
+        setMemo(parsedSession.memo);
+        setPlaybackSpeed(parsedSession.playbackSpeed);
+        setAcknowledgedBreakPhase(parsedSession.acknowledgedBreakPhase);
+        setIsPaused(
+          parsedSession.screen === "match" &&
+            Boolean(
+              parsedSession.match &&
+                OBSERVATION_PHASES.has(parsedSession.match.phase),
+            ),
+        );
+      } else if (parsedCampaign) {
         setCampaign(parsedCampaign);
+        setCampaignStarted(
+          parsedCampaign.currentRound > 0 || parsedCampaign.results.length > 0,
+        );
       }
       setStorageReady(true);
     }, 0);
@@ -100,11 +128,51 @@ export function GameApp() {
 
   useEffect(() => {
     if (!storageReady) return;
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(campaign));
+    try {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(campaign));
+    } catch {
+      // The active in-memory game should remain usable if storage is unavailable.
+    }
   }, [campaign, storageReady]);
 
+  useEffect(() => {
+    if (!storageReady) return;
+    const timer = window.setTimeout(() => {
+      const session: SavedSession = {
+        version: 1,
+        screen,
+        campaign,
+        campaignStarted,
+        match,
+        lastResult,
+        memo,
+        playbackSpeed,
+        acknowledgedBreakPhase,
+      };
+      try {
+        window.localStorage.setItem(
+          SESSION_STORAGE_KEY,
+          JSON.stringify(session),
+        );
+      } catch {
+        // Ignore storage quota/privacy failures and keep the live session running.
+      }
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [
+    acknowledgedBreakPhase,
+    campaign,
+    campaignStarted,
+    lastResult,
+    match,
+    memo,
+    playbackSpeed,
+    screen,
+    storageReady,
+  ]);
+
   const matchPhase = match?.phase;
-  const hasSavedCampaign = campaign.results.length > 0;
+  const hasSavedCampaign = campaignStarted;
   useEffect(() => {
     if (
       screen !== "match" ||
@@ -124,10 +192,37 @@ export function GameApp() {
   }, [isPaused, matchPhase, playbackSpeed, screen]);
 
   useEffect(() => {
+    if (screen !== "match" || !match || !OBSERVATION_PHASES.has(match.phase)) {
+      return;
+    }
+    const latestGoal = match.events.find((event) => event.type === "GOAL");
+    if (!latestGoal || handledGoalEvent.current === latestGoal.id) return;
+    handledGoalEvent.current = latestGoal.id;
+    goalPauseActive.current = true;
+    setGoalEvent(latestGoal);
+    setIsPaused(true);
+    if (goalPauseTimer.current) window.clearTimeout(goalPauseTimer.current);
+    goalPauseTimer.current = window.setTimeout(() => {
+      goalPauseActive.current = false;
+      setGoalEvent(undefined);
+      setIsPaused(false);
+    }, 500);
+  }, [match, screen]);
+
+  useEffect(
+    () => () => {
+      if (goalPauseTimer.current) window.clearTimeout(goalPauseTimer.current);
+    },
+    [],
+  );
+
+  useEffect(() => {
     if (
       screen !== "match" ||
       !match ||
       match.phase !== "FINISHED" ||
+      goalPauseActive.current ||
+      goalEvent ||
       handledFinishedMatch.current === match.id
     ) {
       return;
@@ -138,18 +233,25 @@ export function GameApp() {
     setCampaign(updatedCampaign);
     setLastResult(result);
     setScreen("fulltime");
-  }, [campaign, match, screen]);
+  }, [campaign, goalEvent, match, screen]);
 
   const beginNewCampaign = () => {
     const fresh = createNewCampaign(Date.now() >>> 0);
     setCampaign(fresh);
+    setCampaignStarted(true);
     setMatch(undefined);
     setLastResult(undefined);
     setMemo("");
     setIsPaused(false);
+    setGoalEvent(undefined);
     setAcknowledgedBreakPhase(undefined);
     handledFinishedMatch.current = undefined;
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(fresh));
+    handledGoalEvent.current = undefined;
+    try {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(fresh));
+    } catch {
+      // The campaign still starts even when browser storage is unavailable.
+    }
     setScreen("campaign");
   };
 
@@ -167,9 +269,11 @@ export function GameApp() {
     setMatch(newMatch);
     setMemo("");
     setIsPaused(false);
+    setGoalEvent(undefined);
     setAcknowledgedBreakPhase(undefined);
     setSelectedPlayerId(undefined);
     handledFinishedMatch.current = undefined;
+    handledGoalEvent.current = undefined;
     setScreen("prematch");
   };
 
@@ -185,7 +289,7 @@ export function GameApp() {
       targetPlayerId?: string,
       cost = 0,
       randomState?: number,
-      attackSide?: "left" | "right",
+      attackSide?: Exclude<AttackSide, "center">,
     ) => {
       setMatch((current) => {
         if (!current) return current;
@@ -244,6 +348,19 @@ export function GameApp() {
         onMovePlayer={(playerId, x, y) =>
           setMatch((current) =>
             current ? moveHomePlayer(current, playerId, x, y) : current,
+          )
+        }
+        onSwapPlayers={(firstId, secondId, originX, originY) =>
+          setMatch((current) =>
+            current
+              ? swapHomePlayerPositions(
+                  current,
+                  firstId,
+                  secondId,
+                  originX,
+                  originY,
+                )
+              : current,
           )
         }
         onSubstitute={(outgoingPlayerId, incomingPlayerId) =>
@@ -359,6 +476,19 @@ export function GameApp() {
               current ? moveHomePlayer(current, playerId, x, y) : current,
             )
           }
+          onSwapPlayers={(firstId, secondId, originX, originY) =>
+            setMatch((current) =>
+              current
+                ? swapHomePlayerPositions(
+                    current,
+                    firstId,
+                    secondId,
+                    originX,
+                    originY,
+                  )
+                : current,
+            )
+          }
           onContinue={resumeMatch}
         />
       );
@@ -371,10 +501,12 @@ export function GameApp() {
         memo={memo}
         playbackSpeed={playbackSpeed}
         isPaused={isPaused}
+        goalEvent={goalEvent}
         onSelectPlayer={setSelectedPlayerId}
         onMemoChange={setMemo}
         onPlaybackSpeedChange={setPlaybackSpeed}
         onPauseChange={(paused) => {
+          if (goalEvent) return;
           setIsPaused(paused);
           if (paused) setSelectedPlayerId(undefined);
         }}

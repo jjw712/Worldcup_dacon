@@ -17,6 +17,7 @@ describe("PreMatchScreen", () => {
         match={match}
         onSelectPlayer={vi.fn()}
         onMovePlayer={vi.fn()}
+        onSwapPlayers={vi.fn()}
         onSubstitute={vi.fn()}
         onConfigureTactic={vi.fn()}
         onStart={vi.fn()}
@@ -27,8 +28,9 @@ describe("PreMatchScreen", () => {
     expect(html).toContain(match.awayTeam.formationName);
     expect(html).toContain("우리 팀");
     expect(html).toContain("상대 보기");
-    expect(html).toContain("선발 11명");
-    expect(html).toContain("교체 명단 15");
+    expect(html).toContain("드래그 교체");
+    expect(html).toContain("선발</strong><span>11명");
+    expect(html).toContain("교체 명단</strong><span>15명");
     expect(html).toContain("선수를 클릭하면 능력치와 상세 정보가 표시됩니다");
     expect(html).toContain("전술 프리셋");
     expect(html).toContain("주전술");

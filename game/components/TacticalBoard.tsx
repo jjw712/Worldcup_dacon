@@ -3,13 +3,16 @@
 import {
   useEffect,
   useRef,
+  type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
+import { canExchangePlayers } from "../playerRules";
 import type { MatchState, Side } from "../types";
 
 interface TacticalBoardProps {
   match: MatchState;
   selectedPlayerId?: string;
+  selectedPlayerIds?: string[];
   editable?: boolean;
   compact?: boolean;
   selectableSide?: Side;
@@ -17,6 +20,12 @@ interface TacticalBoardProps {
   highlightedPlayerIds?: string[];
   onSelectPlayer?: (playerId: string) => void;
   onMovePlayer?: (playerId: string, x: number, y: number) => void;
+  onSwapPlayers?: (
+    firstPlayerId: string,
+    secondPlayerId: string,
+    firstOriginX: number,
+    firstOriginY: number,
+  ) => void;
 }
 
 interface DisplayPoint {
@@ -25,6 +34,9 @@ interface DisplayPoint {
   vx?: number;
   vy?: number;
 }
+
+const constrain = (value: number, min: number, max: number): number =>
+  Math.min(max, Math.max(min, value));
 
 const hexWithAlpha = (hex: string, alpha: number): string => {
   const normalized = hex.replace("#", "");
@@ -61,6 +73,7 @@ const contrastText = (hex: string): string => {
 export function TacticalBoard({
   match,
   selectedPlayerId,
+  selectedPlayerIds,
   editable = false,
   compact = false,
   selectableSide = "home",
@@ -68,6 +81,7 @@ export function TacticalBoard({
   highlightedPlayerIds,
   onSelectPlayer,
   onMovePlayer,
+  onSwapPlayers,
 }: TacticalBoardProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const displayPoints = useRef<Record<string, DisplayPoint>>({});
@@ -76,15 +90,19 @@ export function TacticalBoard({
     y: match.ball.y,
   });
   const draggingPlayerId = useRef<string | null>(null);
+  const draggingOrigin = useRef<DisplayPoint | null>(null);
+  const hoveredPlayerId = useRef<string | null>(null);
   const latestMatch = useRef(match);
   const latestSelected = useRef(selectedPlayerId);
+  const latestSelectedIds = useRef(selectedPlayerIds);
   const latestHighlighted = useRef(highlightedPlayerIds);
 
   useEffect(() => {
     latestMatch.current = match;
     latestSelected.current = selectedPlayerId;
+    latestSelectedIds.current = selectedPlayerIds;
     latestHighlighted.current = highlightedPlayerIds;
-  }, [highlightedPlayerIds, match, selectedPlayerId]);
+  }, [highlightedPlayerIds, match, selectedPlayerId, selectedPlayerIds]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -231,17 +249,25 @@ export function TacticalBoard({
         activeKinds.has("ATTACK_WIDE") ||
         activeKinds.has("PREPARED_PLAN")
       ) {
-        const targetTop = current.homeTactic.attackSide === "left";
-        const bandY = targetTop ? fieldY : fieldY + fieldH * 0.76;
-        context.fillStyle = "rgba(106, 164, 191, 0.14)";
-        context.fillRect(fieldX, bandY, fieldW, fieldH * 0.24);
-        context.strokeStyle = "rgba(128, 192, 220, 0.7)";
-        context.lineWidth = compact ? 1 : 2;
-        context.setLineDash([8, 6]);
-        context.beginPath();
-        context.moveTo(fieldX + fieldW * 0.35, bandY + fieldH * 0.12);
-        context.lineTo(fieldX + fieldW * 0.82, bandY + fieldH * 0.12);
-        context.stroke();
+        const bandYs =
+          current.homeTactic.attackSide === "both"
+            ? [fieldY, fieldY + fieldH * 0.76]
+            : [
+                current.homeTactic.attackSide === "left"
+                  ? fieldY
+                  : fieldY + fieldH * 0.76,
+              ];
+        for (const bandY of bandYs) {
+          context.fillStyle = "rgba(106, 164, 191, 0.14)";
+          context.fillRect(fieldX, bandY, fieldW, fieldH * 0.24);
+          context.strokeStyle = "rgba(128, 192, 220, 0.7)";
+          context.lineWidth = compact ? 1 : 2;
+          context.setLineDash([8, 6]);
+          context.beginPath();
+          context.moveTo(fieldX + fieldW * 0.35, bandY + fieldH * 0.12);
+          context.lineTo(fieldX + fieldW * 0.82, bandY + fieldH * 0.12);
+          context.stroke();
+        }
         context.setLineDash([]);
       }
 
@@ -297,7 +323,9 @@ export function TacticalBoard({
         const x = fieldX + existing.x * fieldW;
         const y = fieldY + existing.y * fieldH;
         const radius = compact ? 7 : Math.max(8, Math.min(12, fieldW / 55));
-        const selected = latestSelected.current === player.id;
+        const selected =
+          latestSelected.current === player.id ||
+          Boolean(latestSelectedIds.current?.includes(player.id));
         const personalCommand = current.commands
           .slice()
           .reverse()
@@ -396,6 +424,100 @@ export function TacticalBoard({
         context.globalAlpha = 1;
       }
 
+      const selectedForComparison = current.players.find(
+        (player) =>
+          player.id === latestSelected.current && player.onField,
+      );
+      const hoveredForComparison = current.players.find(
+        (player) =>
+          player.id === hoveredPlayerId.current &&
+          player.onField &&
+          player.id !== selectedForComparison?.id,
+      );
+      if (selectedForComparison && hoveredForComparison) {
+        const hoveredPoint =
+          displayPoints.current[hoveredForComparison.id] ??
+          hoveredForComparison;
+        const comparisonRows = compact
+          ? [
+              ["종합", selectedForComparison.coreAbilities.overall, hoveredForComparison.coreAbilities.overall],
+              ["패스", selectedForComparison.attributes.passing, hoveredForComparison.attributes.passing],
+              ["수비", selectedForComparison.attributes.defending, hoveredForComparison.attributes.defending],
+            ] as const
+          : [
+              ["종합", selectedForComparison.coreAbilities.overall, hoveredForComparison.coreAbilities.overall],
+              ["속도", selectedForComparison.attributes.pace, hoveredForComparison.attributes.pace],
+              ["슈팅", selectedForComparison.attributes.shooting, hoveredForComparison.attributes.shooting],
+              ["패스", selectedForComparison.attributes.passing, hoveredForComparison.attributes.passing],
+              ["수비", selectedForComparison.attributes.defending, hoveredForComparison.attributes.defending],
+            ] as const;
+        const cardWidth = Math.min(compact ? 220 : 282, w - 20);
+        const cardHeight = compact ? 104 : 154;
+        const hoveredCanvasX = fieldX + hoveredPoint.x * fieldW;
+        const hoveredCanvasY = fieldY + hoveredPoint.y * fieldH;
+        const cardX = constrain(
+          hoveredCanvasX > w * 0.56
+            ? hoveredCanvasX - cardWidth - 22
+            : hoveredCanvasX + 22,
+          10,
+          w - cardWidth - 10,
+        );
+        const cardY = constrain(
+          hoveredCanvasY - cardHeight / 2,
+          10,
+          h - cardHeight - 10,
+        );
+
+        context.fillStyle = "rgba(7, 27, 21, 0.96)";
+        context.fillRect(cardX, cardY, cardWidth, cardHeight);
+        context.strokeStyle = "rgba(201, 244, 89, 0.72)";
+        context.lineWidth = 1;
+        context.strokeRect(cardX, cardY, cardWidth, cardHeight);
+        context.textBaseline = "middle";
+        context.fillStyle = "#c9f459";
+        context.font = `900 ${compact ? 10 : 11}px ui-sans-serif, sans-serif`;
+        context.textAlign = "left";
+        context.fillText("교체 능력 비교", cardX + 10, cardY + 13);
+        context.fillStyle = "#f3f0e8";
+        context.font = `800 ${compact ? 11 : 13}px ui-sans-serif, sans-serif`;
+        context.fillText(
+          selectedForComparison.name,
+          cardX + 10,
+          cardY + (compact ? 31 : 34),
+        );
+        context.textAlign = "right";
+        context.fillText(
+          hoveredForComparison.name,
+          cardX + cardWidth - 10,
+          cardY + (compact ? 31 : 34),
+        );
+
+        comparisonRows.forEach(([label, selectedValue, hoveredValue], index) => {
+          const rowY = cardY + (compact ? 52 : 58) + index * (compact ? 16 : 18);
+          context.font = `800 ${compact ? 10 : 12}px ui-sans-serif, sans-serif`;
+          context.textAlign = "left";
+          context.fillStyle =
+            selectedValue >= hoveredValue ? "#c9f459" : "#dce4df";
+          context.fillText(String(Math.round(selectedValue)), cardX + 10, rowY);
+          context.textAlign = "center";
+          context.fillStyle = "#8fa198";
+          const difference = Math.round(hoveredValue - selectedValue);
+          context.fillText(
+            `${label}  ${difference > 0 ? `+${difference}` : difference}`,
+            cardX + cardWidth / 2,
+            rowY,
+          );
+          context.textAlign = "right";
+          context.fillStyle =
+            hoveredValue >= selectedValue ? "#c9f459" : "#dce4df";
+          context.fillText(
+            String(Math.round(hoveredValue)),
+            cardX + cardWidth - 10,
+            rowY,
+          );
+        });
+      }
+
       displayBall.current.x +=
         (current.ball.x - displayBall.current.x) * 0.075;
       displayBall.current.y +=
@@ -467,8 +589,11 @@ export function TacticalBoard({
       }))
       .sort((a, b) => a.distance - b.distance)[0];
 
-    if (nearest && nearest.distance < 0.055) {
+    if (nearest && nearest.distance < 0.075) {
       draggingPlayerId.current = editable ? nearest.player.id : null;
+      draggingOrigin.current = editable
+        ? { x: nearest.player.x, y: nearest.player.y }
+        : null;
       onSelectPlayer?.(nearest.player.id);
       event.currentTarget.setPointerCapture(event.pointerId);
     }
@@ -477,18 +602,134 @@ export function TacticalBoard({
   const handlePointerMove = (
     event: ReactPointerEvent<HTMLCanvasElement>,
   ) => {
-    if (!editable || !draggingPlayerId.current) return;
     const point = pointerPosition(event);
-    onMovePlayer?.(draggingPlayerId.current, point.x, point.y);
+    const current = latestMatch.current;
+    const nearest = current.players
+      .filter(
+        (player) =>
+          player.side === selectableSide &&
+          player.onField &&
+          player.id !== latestSelected.current &&
+          (!latestHighlighted.current ||
+            latestHighlighted.current.includes(player.id)),
+      )
+      .map((player) => ({
+        player,
+        distance: Math.hypot(player.x - point.x, player.y - point.y),
+      }))
+      .sort((first, second) => first.distance - second.distance)[0];
+    hoveredPlayerId.current =
+      latestSelected.current && nearest && nearest.distance < 0.09
+        ? nearest.player.id
+        : null;
+
+    if (editable && draggingPlayerId.current) {
+      onMovePlayer?.(draggingPlayerId.current, point.x, point.y);
+    }
   };
 
   const handlePointerUp = (
     event: ReactPointerEvent<HTMLCanvasElement>,
   ) => {
+    const draggedPlayerId = draggingPlayerId.current;
+    const origin = draggingOrigin.current;
+    if (editable && draggedPlayerId && origin && onSwapPlayers) {
+      const point = pointerPosition(event);
+      const overlapping = latestMatch.current.players
+        .filter(
+          (player) =>
+            player.id !== draggedPlayerId &&
+            player.side === selectableSide &&
+            player.onField,
+        )
+        .map((player) => ({
+          player,
+          distance: Math.hypot(player.x - point.x, player.y - point.y),
+        }))
+        .sort((first, second) => first.distance - second.distance)[0];
+      if (overlapping && overlapping.distance < 0.075) {
+        const draggedPlayer = latestMatch.current.players.find(
+          (player) => player.id === draggedPlayerId,
+        );
+        if (draggedPlayer && canExchangePlayers(draggedPlayer, overlapping.player)) {
+          onSwapPlayers(
+            draggedPlayerId,
+            overlapping.player.id,
+            origin.x,
+            origin.y,
+          );
+        } else {
+          onMovePlayer?.(draggedPlayerId, origin.x, origin.y);
+        }
+      }
+    }
     draggingPlayerId.current = null;
+    draggingOrigin.current = null;
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
+  };
+
+  const handlePointerCancel = (
+    event: ReactPointerEvent<HTMLCanvasElement>,
+  ) => {
+    const draggedPlayerId = draggingPlayerId.current;
+    const origin = draggingOrigin.current;
+    if (editable && draggedPlayerId && origin) {
+      onMovePlayer?.(draggedPlayerId, origin.x, origin.y);
+    }
+    draggingPlayerId.current = null;
+    draggingOrigin.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  };
+
+  const keyboardPlayers = () =>
+    match.players.filter(
+      (player) =>
+        player.side === selectableSide &&
+        player.onField &&
+        (!highlightedPlayerIds || highlightedPlayerIds.includes(player.id)),
+    );
+
+  const handleKeyDown = (event: ReactKeyboardEvent<HTMLCanvasElement>) => {
+    const players = keyboardPlayers();
+    if (!players.length) return;
+    const currentIndex = players.findIndex(
+      (player) => player.id === selectedPlayerId,
+    );
+
+    if (
+      event.key === "Home" ||
+      event.key === "PageDown" ||
+      event.key === "PageUp"
+    ) {
+      event.preventDefault();
+      const direction = event.key === "PageUp" ? -1 : 1;
+      const nextIndex =
+        event.key === "Home"
+          ? 0
+          : (Math.max(0, currentIndex) + direction + players.length) %
+            players.length;
+      onSelectPlayer?.(players[nextIndex].id);
+      return;
+    }
+
+    if (!editable || !selectedPlayerId || !onMovePlayer) return;
+    const selected = players.find((player) => player.id === selectedPlayerId);
+    if (!selected) return;
+    const movement = event.shiftKey ? 0.05 : 0.02;
+    const offsets: Partial<Record<string, [number, number]>> = {
+      ArrowLeft: [-movement, 0],
+      ArrowRight: [movement, 0],
+      ArrowUp: [0, -movement],
+      ArrowDown: [0, movement],
+    };
+    const offset = offsets[event.key];
+    if (!offset) return;
+    event.preventDefault();
+    onMovePlayer(selected.id, selected.x + offset[0], selected.y + offset[1]);
   };
 
   return (
@@ -497,14 +738,21 @@ export function TacticalBoard({
       className={`tactical-board ${editable ? "is-editable" : ""}`}
       aria-label={
         editable
-          ? "드래그하여 대한민국 선수 위치를 조정하는 전술판"
-          : "실시간 경기 전술판"
+          ? "대한민국 선수 위치를 조정하는 전술판. Page Up과 Page Down으로 선수를 선택하고 방향키로 이동하십시오."
+          : onSelectPlayer
+            ? "선수를 선택하는 전술판. Page Up과 Page Down으로 선수를 선택하십시오."
+            : "실시간 경기 전술판"
       }
-      role="img"
+      role={editable || onSelectPlayer ? "application" : "img"}
+      tabIndex={editable || onSelectPlayer ? 0 : undefined}
+      onKeyDown={handleKeyDown}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
-      onPointerCancel={handlePointerUp}
+      onPointerCancel={handlePointerCancel}
+      onPointerLeave={() => {
+        if (!draggingPlayerId.current) hoveredPlayerId.current = null;
+      }}
     />
   );
 }

@@ -96,29 +96,44 @@ function carryPlayers(
   players: MatchPlayer[],
   previous: Record<string, CarryPlayerState>,
 ): Record<string, CarryPlayerState> {
-  return Object.fromEntries(
-    players
-      .filter((player) => player.teamId === "KOR")
-      .map((player) => [
-        player.id,
-        {
-          stamina: Math.min(100, Math.round(player.currentStamina + 30)),
-          condition: Math.max(
-            58,
-            Math.round(player.condition - (player.injured ? 18 : 2) + 6),
-          ),
-          yellowCards:
-            (previous[player.id]?.yellowCards ?? 0) +
-            (player.card === "YELLOW" ? 1 : 0),
-          suspendedMatches: player.card === "RED" ? 1 : 0,
-          injuryMatchesRemaining: player.injured ? 1 : 0,
-          managerTrust: Math.min(
-            100,
-            Math.round(player.managerTrust + (player.onField ? 2 : -1)),
-          ),
-        },
-      ]),
+  const next = Object.fromEntries(
+    Object.entries(previous).map(([playerId, carry]) => [
+      playerId,
+      {
+        ...carry,
+        suspendedMatches: Math.max(0, carry.suspendedMatches - 1),
+        injuryMatchesRemaining: Math.max(0, carry.injuryMatchesRemaining - 1),
+      },
+    ]),
   );
+
+  for (const player of players.filter((candidate) => candidate.teamId === "KOR")) {
+    const prior = previous[player.id];
+    const accumulatedYellows =
+      (prior?.yellowCards ?? 0) + (player.card === "YELLOW" ? 1 : 0);
+    const yellowSuspension = accumulatedYellows >= 2;
+    next[player.id] = {
+      stamina: Math.min(100, Math.round(player.currentStamina + 30)),
+      condition: Math.max(
+        58,
+        Math.round(player.condition - (player.injured ? 18 : 2) + 6),
+      ),
+      yellowCards: yellowSuspension ? 0 : accumulatedYellows,
+      suspendedMatches:
+        player.card === "RED" || yellowSuspension
+          ? 1
+          : Math.max(0, (prior?.suspendedMatches ?? 0) - 1),
+      injuryMatchesRemaining: player.injured
+        ? 1
+        : Math.max(0, (prior?.injuryMatchesRemaining ?? 0) - 1),
+      managerTrust: Math.min(
+        100,
+        Math.round(player.managerTrust + (player.onField ? 2 : -1)),
+      ),
+    };
+  }
+
+  return next;
 }
 
 export function applyMatchResult(

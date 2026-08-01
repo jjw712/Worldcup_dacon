@@ -23,7 +23,7 @@ export function TacticPresetSelector({
         <span>TACTICAL PRESETS</span>
         <strong>전술 프리셋</strong>
         <small>
-          주전술은 즉시 배치에 반영되고 서브 1·2는 경기 중 전환용으로 저장됩니다.
+          프리셋 카드를 누르면 주전술로 적용됩니다. 서브 1·2는 아래 버튼으로 지정하십시오.
         </small>
       </div>
       <div className="tactic-preset-list">
@@ -36,6 +36,8 @@ export function TacticPresetSelector({
             <article
               key={preset.id}
               className={assignedSlot ? "is-active" : ""}
+              title="클릭하여 주전술로 적용"
+              onClick={() => onAssign("main", preset.id)}
             >
               <span>
                 <b>{preset.formation}</b>
@@ -83,12 +85,14 @@ export function SubTacticSwitcher({
   costType = "none",
   disabled = false,
   availableBudget,
+  pendingSlot,
 }: {
   match: MatchState;
   onSwitch: (slot: "sub1" | "sub2") => void;
   costType?: "seconds" | "ap" | "none";
   disabled?: boolean;
   availableBudget?: number;
+  pendingSlot?: "sub1" | "sub2";
 }) {
   const tacticLoadout = match.tacticLoadout ?? DEFAULT_TACTIC_LOADOUT;
   const entries = [
@@ -106,7 +110,10 @@ export function SubTacticSwitcher({
         const preset = TACTIC_PRESETS.find(
           (item) => item.id === tacticLoadout[slot],
         )!;
-        const active = match.homeTactic.presetId === preset.id;
+        const active = pendingSlot
+          ? pendingSlot === slot
+          : match.homeTactic.presetId === preset.id;
+        const cancelable = pendingSlot === slot;
         const requiredCost =
           costType === "ap" ? (slot === "sub1" ? 2 : 4) : cost;
         const displayCost =
@@ -122,8 +129,10 @@ export function SubTacticSwitcher({
             className={active ? "is-active" : ""}
             disabled={
               disabled ||
-              active ||
-              (availableBudget !== undefined && availableBudget < requiredCost)
+              (active && !cancelable) ||
+              (!cancelable &&
+                availableBudget !== undefined &&
+                availableBudget < requiredCost)
             }
             onClick={() => onSwitch(slot)}
           >
@@ -131,7 +140,13 @@ export function SubTacticSwitcher({
             <b>{preset.formation}</b>
             <strong>{preset.name}</strong>
             <p>{preset.summary}</p>
-            <em>{active ? "현재 전술" : displayCost}</em>
+            <em>
+              {cancelable
+                ? `적용 취소 · ${requiredCost} AP 환급`
+                : active
+                  ? "현재 전술"
+                  : displayCost}
+            </em>
           </button>
         );
       })}

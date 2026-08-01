@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type DragEvent } from "react";
+import { canExchangePlayers } from "../playerRules";
 import type { MatchState, RosterPlayer, Side } from "../types";
 
 interface TeamRosterPanelProps {
@@ -43,6 +44,50 @@ const sortByPosition = <T extends RosterPlayer>(players: T[]): T[] =>
       positionOrder[first.position] - positionOrder[second.position] ||
       first.shirtNumber - second.shirtNumber,
   );
+
+export const rosterComparisonRows = (
+  base: RosterPlayer,
+  candidate: RosterPlayer,
+) => {
+  const row = (label: string, baseValue: number, candidateValue: number) => ({
+    label,
+    baseValue,
+    candidateValue,
+  });
+  if (base.position === "GK" && candidate.position === "GK") {
+    return [
+      row("종합", base.coreAbilities.overall, candidate.coreAbilities.overall),
+      row(
+        "반사 신경",
+        base.advancedAbilities.gkReflexes ?? 0,
+        candidate.advancedAbilities.gkReflexes ?? 0,
+      ),
+      row(
+        "핸들링",
+        base.advancedAbilities.gkHandling ?? 0,
+        candidate.advancedAbilities.gkHandling ?? 0,
+      ),
+      row(
+        "배급",
+        base.advancedAbilities.gkDistribution ?? 0,
+        candidate.advancedAbilities.gkDistribution ?? 0,
+      ),
+      row(
+        "위치 선정",
+        base.advancedAbilities.gkPositioning ?? 0,
+        candidate.advancedAbilities.gkPositioning ?? 0,
+      ),
+    ];
+  }
+  return [
+    row("종합", base.coreAbilities.overall, candidate.coreAbilities.overall),
+    row("속도", base.coreAbilities.pace, candidate.coreAbilities.pace),
+    row("슈팅", base.coreAbilities.shooting, candidate.coreAbilities.shooting),
+    row("패스", base.coreAbilities.passing, candidate.coreAbilities.passing),
+    row("수비", base.coreAbilities.defending, candidate.coreAbilities.defending),
+    row("피지컬", base.coreAbilities.physical, candidate.coreAbilities.physical),
+  ];
+};
 
 const reservationLabel = (
   phase: MatchState["pendingSubstitutions"][number]["targetPhase"],
@@ -125,15 +170,28 @@ export function TeamRosterPanel({
   const [showDetails, setShowDetails] = useState(false);
   const [outgoingPlayerId, setOutgoingPlayerId] = useState<string>();
   const [substitutionMessage, setSubstitutionMessage] = useState<string>();
+  const [draggedPlayerId, setDraggedPlayerId] = useState<string>();
+  const [hoveredComparison, setHoveredComparison] = useState<{
+    playerId: string;
+    left: number;
+    top: number;
+  }>();
   const team = side === "home" ? match.homeTeam : match.awayTeam;
   const startingPlayers = useMemo(
     () =>
       match.players.filter(
-        (player) => player.side === side && player.onField,
+        (player) =>
+          player.side === side &&
+          (player.onField || (side === "home" && player.injured)),
       ),
     [match.players, side],
   );
   const startingIds = new Set(startingPlayers.map((player) => player.id));
+  const matchPlayerIds = new Set(
+    match.players
+      .filter((player) => player.side === side)
+      .map((player) => player.id),
+  );
   const substitutedOutIds = new Set(match.substitutedOutPlayerIds ?? []);
   const pendingSubstitutions =
     side === "home" ? (match.pendingSubstitutions ?? []) : [];
@@ -143,9 +201,17 @@ export function TeamRosterPanel({
   const pendingOutgoingIds = new Set(
     pendingSubstitutions.map((item) => item.outgoingPlayerId),
   );
+  const externallySelectedStarter = startingPlayers.find(
+    (player) => player.id === selectedPlayerId,
+  );
+  const externallySelectedStarterId = externallySelectedStarter?.id;
+  const externallySelectedStarterPending = pendingOutgoingIds.has(
+    externallySelectedStarterId ?? "",
+  );
   const benchPlayers = team.roster.filter(
     (player) =>
       !startingIds.has(player.id) &&
+      !matchPlayerIds.has(player.id) &&
       (side !== "home" ||
         (!substitutedOutIds.has(player.id) &&
           !pendingIncomingIds.has(player.id))),
@@ -157,19 +223,50 @@ export function TeamRosterPanel({
     displayedPlayers.find((player) => player.id === selectedPlayerId) ??
     startingPlayers.find((player) => player.id === selectedPlayerId) ??
     benchPlayers.find((player) => player.id === selectedPlayerId);
+  const effectiveOutgoingPlayerId =
+    outgoingPlayerId ??
+    (allowSubstitution && !externallySelectedStarterPending
+      ? externallySelectedStarterId
+      : undefined);
   const outgoing = startingPlayers.find(
-    (player) => player.id === outgoingPlayerId,
+    (player) => player.id === effectiveOutgoingPlayerId,
+  );
+  const comparisonBase = outgoing ?? selected;
+  const comparisonCandidate = [...startingPlayers, ...benchPlayers].find(
+    (player) => player.id === hoveredComparison?.playerId,
+  );
+  const comparisonRows =
+    comparisonBase &&
+    comparisonCandidate &&
+    comparisonBase.id !== comparisonCandidate.id
+      ? rosterComparisonRows(comparisonBase, comparisonCandidate)
+      : undefined;
+  const comparisonCanExchange = Boolean(
+    comparisonBase &&
+      comparisonCandidate &&
+      canExchangePlayers(comparisonBase, comparisonCandidate),
   );
   const selectedIsBench = selected && !startingIds.has(selected.id);
   const substitutionLimitReached =
     (match.substitutionsUsed ?? 0) + pendingSubstitutions.length >= 5;
 
-  const selectPlayer = (player: RosterPlayer) => {
+  const selectPlayer = (
+    player: RosterPlayer,
+    source: "starting" | "bench" = listMode,
+  ) => {
+    if (
+      source === "bench" &&
+      !outgoingPlayerId &&
+      externallySelectedStarterId &&
+      !externallySelectedStarterPending
+    ) {
+      setOutgoingPlayerId(externallySelectedStarterId);
+    }
     onSelectPlayer(player.id);
     setShowDetails(false);
     setSubstitutionMessage(undefined);
     if (
-      listMode === "starting" &&
+      source === "starting" &&
       allowSubstitution &&
       !pendingOutgoingIds.has(player.id)
     ) {
@@ -177,30 +274,208 @@ export function TeamRosterPanel({
     }
   };
 
-  const performSubstitution = () => {
-    if (!outgoing || !selected || !selectedIsBench || !onSubstitute) return;
-    onSubstitute(outgoing.id, selected.id);
+  const completeSubstitution = (
+    outgoingPlayer: RosterPlayer,
+    incomingPlayer: RosterPlayer,
+  ) => {
+    if (!onSubstitute || substitutionLimitReached) return;
+    if (!canExchangePlayers(outgoingPlayer, incomingPlayer)) {
+      setSubstitutionMessage(
+        "골키퍼와 필드 플레이어는 서로 교체할 수 없습니다.",
+      );
+      return;
+    }
+    onSubstitute(outgoingPlayer.id, incomingPlayer.id);
     setSubstitutionMessage(
       substitutionMode === "queue"
-        ? `${outgoing.name} → ${selected.name} 교체를 예약했습니다.`
+        ? `${outgoingPlayer.name} → ${incomingPlayer.name} 교체를 예약했습니다.`
         : substitutionMode === "lineup"
-          ? `${outgoing.name} → ${selected.name} 선발 변경을 적용했습니다. 경기 시작은 별도 버튼으로 진행하십시오.`
-          : `${outgoing.name} → ${selected.name} 교체만 적용했습니다. 경기 재개는 별도 버튼으로 진행하십시오.`,
+          ? `${outgoingPlayer.name} 대신 ${incomingPlayer.name}을 선발로 배치했습니다.`
+          : `${outgoingPlayer.name} 대신 ${incomingPlayer.name}을 투입했습니다.`,
     );
-    onSelectPlayer(selected.id);
+    onSelectPlayer(incomingPlayer.id);
     setOutgoingPlayerId(undefined);
+    setDraggedPlayerId(undefined);
     setListMode("starting");
   };
 
+  const performSubstitution = () => {
+    if (!outgoing || !selected || !selectedIsBench) return;
+    completeSubstitution(outgoing, selected);
+  };
+
+  const dropPlayer = (
+    target: RosterPlayer,
+    event: DragEvent<HTMLButtonElement>,
+  ) => {
+    event.preventDefault();
+    const dragged = [...startingPlayers, ...benchPlayers].find(
+      (player) => player.id === draggedPlayerId,
+    );
+    if (!dragged) return;
+    const draggedIsStarting = startingIds.has(dragged.id);
+    const targetIsStarting = startingIds.has(target.id);
+    if (draggedIsStarting === targetIsStarting) return;
+    completeSubstitution(
+      draggedIsStarting ? dragged : target,
+      draggedIsStarting ? target : dragged,
+    );
+  };
+
+  const showComparison = (player: RosterPlayer, element: HTMLElement) => {
+    if (!comparisonBase || comparisonBase.id === player.id) return;
+    const bounds = element.getBoundingClientRect();
+    const cardWidth = Math.min(300, window.innerWidth - 16);
+    const cardHeight = 238;
+    const left =
+      bounds.right + 12 + cardWidth <= window.innerWidth
+        ? bounds.right + 12
+        : Math.max(8, bounds.left - cardWidth - 12);
+    setHoveredComparison({
+      playerId: player.id,
+      left,
+      top: Math.max(
+        8,
+        Math.min(bounds.top, window.innerHeight - cardHeight - 8),
+      ),
+    });
+  };
+
+  const renderPlayerButton = (
+    player: RosterPlayer,
+    source: "starting" | "bench",
+  ) => {
+    const condition = conditionGrade(player.condition ?? 92);
+    const draggedPlayer = [...startingPlayers, ...benchPlayers].find(
+      (candidate) => candidate.id === draggedPlayerId,
+    );
+    const isOppositeDropTarget = Boolean(
+      draggedPlayerId &&
+        startingIds.has(draggedPlayerId) !== (source === "starting") &&
+        draggedPlayer &&
+        canExchangePlayers(draggedPlayer, player),
+    );
+    return (
+      <button
+        type="button"
+        key={player.id}
+        draggable={
+          allowSubstitution &&
+          !substitutionLimitReached &&
+          !pendingOutgoingIds.has(player.id)
+        }
+        className={`${selected?.id === player.id ? "is-selected" : ""} ${
+          pendingOutgoingIds.has(player.id) ? "is-pending" : ""
+        } ${draggedPlayerId === player.id ? "is-dragging" : ""} ${
+          isOppositeDropTarget ? "is-drop-target" : ""
+        }`}
+        onClick={() => selectPlayer(player, source)}
+        onDragStart={(event) => {
+          setDraggedPlayerId(player.id);
+          event.dataTransfer.effectAllowed = "move";
+          event.dataTransfer.setData("text/plain", player.id);
+        }}
+        onDragEnd={() => setDraggedPlayerId(undefined)}
+        onMouseEnter={(event) => showComparison(player, event.currentTarget)}
+        onMouseLeave={(event) => {
+          if (document.activeElement !== event.currentTarget) {
+            setHoveredComparison(undefined);
+          }
+        }}
+        onFocus={(event) => showComparison(player, event.currentTarget)}
+        onBlur={() => setHoveredComparison(undefined)}
+        onDragOver={(event) => {
+          if (isOppositeDropTarget) event.preventDefault();
+        }}
+        onDrop={(event) => dropPlayer(player, event)}
+      >
+        <i>{player.shirtNumber}</i>
+        <span>
+          <strong>{player.name}</strong>
+          <small>{player.detailedPosition} · {player.club}</small>
+        </span>
+        <div className="roster-row-metrics">
+          <b title="종합 능력치">{player.coreAbilities.overall}</b>
+          {pendingOutgoingIds.has(player.id) ? (
+            <em className="is-reserved">예약</em>
+          ) : "injured" in player && player.injured ? (
+            <em className="is-injured">부상</em>
+          ) : (
+            <em className={`condition-${condition.tone}`} title="컨디션">
+              {condition.arrow} {condition.label}
+            </em>
+          )}
+        </div>
+      </button>
+    );
+  };
+
+  const rosterColumnHead = (
+    <div className="roster-column-head" aria-hidden="true">
+      <span>선수</span>
+      <div><b>능력</b><b>컨디션</b></div>
+    </div>
+  );
+
   return (
-    <div className="embedded-roster-panel">
-      <div className="roster-list-tabs">
+    <div
+      className="embedded-roster-panel"
+      data-hover-comparison="enabled"
+    >
+      {comparisonBase && comparisonCandidate && comparisonRows && (
+        <aside
+          className="roster-hover-comparison"
+          style={{
+            left: hoveredComparison?.left,
+            top: hoveredComparison?.top,
+          }}
+          role="status"
+          aria-label={`${comparisonBase.name} 선수와 ${comparisonCandidate.name} 선수 능력 비교`}
+        >
+          <span>
+            {comparisonCanExchange
+              ? "교체 능력 비교"
+              : "선수 능력 비교 · 교체 불가"}
+          </span>
+          <header>
+            <strong>{comparisonBase.name}</strong>
+            <i>↔</i>
+            <strong>{comparisonCandidate.name}</strong>
+          </header>
+          <div>
+            {comparisonRows.map(({ label, baseValue, candidateValue }) => {
+              const difference = candidateValue - baseValue;
+              return (
+                <p key={label}>
+                  <b>{baseValue}</b>
+                  <span>
+                    {label}
+                    <em
+                      className={
+                        difference > 0
+                          ? "is-plus"
+                          : difference < 0
+                            ? "is-minus"
+                            : ""
+                      }
+                    >
+                      {difference > 0 ? `+${difference}` : difference}
+                    </em>
+                  </span>
+                  <b>{candidateValue}</b>
+                </p>
+              );
+            })}
+          </div>
+        </aside>
+      )}
+      {!allowSubstitution && <div className="roster-list-tabs">
         <button
           type="button"
           className={listMode === "starting" ? "is-active" : ""}
           onClick={() => setListMode("starting")}
         >
-          선발 11명
+          선발 {startingPlayers.length}명
         </button>
         <button
           type="button"
@@ -209,14 +484,24 @@ export function TeamRosterPanel({
         >
           교체 명단 {benchPlayers.length}
         </button>
-        {allowSubstitution && match.phase !== "PRE_MATCH" && (
-          <span className="substitution-count">
-            교체 {match.substitutionsUsed ?? 0}/5
-            {pendingSubstitutions.length > 0 &&
-              ` · 예약 ${pendingSubstitutions.length}명`}
-          </span>
-        )}
-      </div>
+      </div>}
+
+      {allowSubstitution && (
+        <div className="roster-substitution-guide">
+          <div>
+            <strong>드래그 교체</strong>
+            <span>
+              선수를 선택한 뒤 다른 선수에 마우스를 올리면 교체 능력을
+              비교합니다. 드래그하면 바로 교체됩니다.
+            </span>
+          </div>
+          <b>
+            {match.phase === "PRE_MATCH"
+              ? "선발 편성"
+              : `교체 ${match.substitutionsUsed ?? 0}/5`}
+          </b>
+        </div>
+      )}
 
       {pendingSubstitutions.length > 0 && (
         <div className="pending-substitution-list">
@@ -257,42 +542,60 @@ export function TeamRosterPanel({
         </div>
       )}
 
-      <div className="roster-column-head" aria-hidden="true">
-        <span>선수</span>
-        <div><b>능력</b><b>컨디션</b></div>
-      </div>
+      {allowSubstitution && outgoing && selected && selectedIsBench && (
+        <div className="substitution-quick-action">
+          <span>
+            <strong>{outgoing.name}</strong>
+            <i>→</i>
+            <strong>{selected.name}</strong>
+          </span>
+          <button
+            type="button"
+            disabled={
+              substitutionLimitReached || !canExchangePlayers(outgoing, selected)
+            }
+            onClick={performSubstitution}
+          >
+            {substitutionMode === "queue"
+              ? "교체 예약"
+              : substitutionMode === "lineup"
+                ? "선발 변경"
+                : "즉시 교체"}
+          </button>
+        </div>
+      )}
 
-      <div className="embedded-roster-list">
-        {displayedPlayers.map((player) => {
-          const condition = conditionGrade(player.condition ?? 92);
-          return (
-            <button
-              type="button"
-              key={player.id}
-              className={`${selected?.id === player.id ? "is-selected" : ""} ${
-                pendingOutgoingIds.has(player.id) ? "is-pending" : ""
-              }`}
-              onClick={() => selectPlayer(player)}
-            >
-              <i>{player.shirtNumber}</i>
-              <span>
-                <strong>{player.name}</strong>
-                <small>{player.detailedPosition} · {player.club}</small>
-              </span>
-              <div className="roster-row-metrics">
-                <b title="종합 능력치">{player.coreAbilities.overall}</b>
-                {pendingOutgoingIds.has(player.id) ? (
-                  <em className="is-reserved">예약</em>
-                ) : (
-                  <em className={`condition-${condition.tone}`} title="컨디션">
-                    {condition.arrow} {condition.label}
-                  </em>
-                )}
-              </div>
-            </button>
-          );
-        })}
-      </div>
+      {allowSubstitution ? (
+        <div className="roster-drag-lists">
+          <section>
+            <header><strong>선발</strong><span>{startingPlayers.length}명</span></header>
+            <div className="embedded-roster-list">
+              {rosterColumnHead}
+              {sortByPosition(startingPlayers).map((player) =>
+                renderPlayerButton(player, "starting"),
+              )}
+            </div>
+          </section>
+          <section>
+            <header><strong>교체 명단</strong><span>{benchPlayers.length}명</span></header>
+            <div className="embedded-roster-list">
+              {rosterColumnHead}
+              {sortByPosition(benchPlayers).map((player) =>
+                renderPlayerButton(player, "bench"),
+              )}
+            </div>
+          </section>
+        </div>
+      ) : (
+        <>
+          <div className="embedded-roster-list">
+            {rosterColumnHead}
+            {displayedPlayers.map((player) =>
+              renderPlayerButton(player, listMode),
+            )}
+          </div>
+        </>
+      )}
 
       {!selected && (
         <p className="player-selection-prompt">
@@ -374,7 +677,11 @@ export function TeamRosterPanel({
             <button
               type="button"
               className="substitution-button"
-              disabled={!outgoing || substitutionLimitReached}
+              disabled={
+                !outgoing ||
+                substitutionLimitReached ||
+                !canExchangePlayers(outgoing, selected)
+              }
               onClick={performSubstitution}
             >
               {substitutionLimitReached

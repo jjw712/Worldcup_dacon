@@ -17,7 +17,7 @@ import type {
   MatchState,
   Position,
 } from "../types";
-import { MatchStatsTable } from "./MatchStatsTable";
+import { MatchStatsTable, possessionPercent } from "./MatchStatsTable";
 import { PlayerComparisonDialog } from "./PlayerComparisonDialog";
 import { TacticalBoard } from "./TacticalBoard";
 import { TeamRosterPanel } from "./TeamRosterPanel";
@@ -37,6 +37,7 @@ const eventIcon = (type: MatchState["events"][number]["type"]) => {
   if (type === "CARD") return "▰";
   if (type === "SUBSTITUTION") return "⇄";
   if (type === "CORNER") return "⚑";
+  if (type === "INJURY") return "✚";
   return undefined;
 };
 
@@ -250,13 +251,15 @@ const breakHeadline = (match: MatchState): string => {
   const lowest = match.players
     .filter((player) => player.side === "home" && player.onField)
     .sort((a, b) => a.currentStamina - b.currentStamina)[0];
-  if (match.metrics.awayRightThreat >= 3)
-    return "상대의 오른쪽 측면 공략이 반복되고 있습니다.";
+  if (
+    match.metrics.awayRightThreat + (match.metrics.awayLeftThreat ?? 0) >= 3
+  )
+    return "상대의 측면 공략이 반복되고 있습니다.";
   if (match.metrics.homeShots === 0)
     return "점유에 비해 결정적인 침투가 부족합니다.";
   if (lowest && lowest.currentStamina < 58)
     return `${lowest.name}의 체력 저하가 가장 큰 위험입니다.`;
-  return "현재 흐름은 균형적입니다. 한 가지 우선순위를 선택하십시오.";
+  return "경기 흐름이 팽팽합니다.";
 };
 
 interface ObservationScreenProps {
@@ -265,6 +268,7 @@ interface ObservationScreenProps {
   memo: string;
   playbackSpeed: 1 | 2 | 4;
   isPaused: boolean;
+  goalEvent?: MatchState["events"][number];
   onSelectPlayer: (playerId: string) => void;
   onMemoChange: (memo: string) => void;
   onPlaybackSpeedChange: (speed: 1 | 2 | 4) => void;
@@ -289,6 +293,7 @@ export function ObservationScreen({
   memo,
   playbackSpeed,
   isPaused,
+  goalEvent,
   onSelectPlayer,
   onMemoChange,
   onPlaybackSpeedChange,
@@ -299,6 +304,7 @@ export function ObservationScreen({
   onSwitchSubTactic,
   onSkipToDecision,
 }: ObservationScreenProps) {
+  const [homePossession] = possessionPercent(match.metrics);
   const [staffTab, setStaffTab] = useState<"feedback" | "commands">(
     "feedback",
   );
@@ -318,8 +324,14 @@ export function ObservationScreen({
         : match.phase === "OBSERVE_45_67"
           ? ({ phase: "HYDRATION_SECOND", label: "67분 하이드레이션" } as const)
           : undefined;
+  const pendingOutgoingIds = new Set(
+    (match.pendingSubstitutions ?? []).map(
+      (substitution) => substitution.outgoingPlayerId,
+    ),
+  );
   const selectedPlayer = match.players.find(
-    (player) => player.id === selectedPlayerId,
+    (player) =>
+      player.id === selectedPlayerId && !pendingOutgoingIds.has(player.id),
   );
   const quickMemos = [
     "측면 수비 확인",
@@ -507,20 +519,11 @@ export function ObservationScreen({
             </div>
             <div className="match-stats-mini">
               <span>
-                슈팅 <b>{match.metrics.homeShots}</b>
+                점유율 <b>{homePossession}%</b>
               </span>
               <span>
-                패스{" "}
-                <b>
-                  {match.metrics.homePassAttempts
-                    ? Math.round(
-                        (match.metrics.homePassSuccess /
-                          match.metrics.homePassAttempts) *
-                          100,
-                      )
-                    : 0}
-                  %
-                </b>
+                슈팅 <b>{match.metrics.homeShots}</b> · 유효{" "}
+                <b>{match.metrics.homeShotsOnTarget ?? 0}</b>
               </span>
             </div>
           </div>
@@ -529,6 +532,14 @@ export function ObservationScreen({
             selectedPlayerId={selectedPlayerId}
             onSelectPlayer={onSelectPlayer}
           />
+          {goalEvent && (
+            <div className="goal-board-overlay" role="status" aria-live="assertive">
+              <span>GOAL</span>
+              <strong>
+                {goalEvent.side === "home" ? "대한민국 득점" : `${match.awayTeam.name} 득점`}
+              </strong>
+            </div>
+          )}
           {isPaused && (
             <div className="match-paused-overlay" role="status">
               <span>경기 중지</span>
@@ -810,11 +821,15 @@ export function FullTimeScreen({
       </header>
       <section className="fulltime-content">
         <div className="fulltime-score">
-          <span>KOR</span>
-          <strong>{match.score.home}</strong>
+          <div>
+            <span>KOR</span>
+            <strong>{match.score.home}</strong>
+          </div>
           <i>:</i>
-          <strong>{match.score.away}</strong>
-          <span>{match.awayTeam.shortName}</span>
+          <div>
+            <span>{match.awayTeam.shortName}</span>
+            <strong>{match.score.away}</strong>
+          </div>
         </div>
         <div>
           <p className="eyebrow">MATCH SUMMARY</p>
@@ -901,10 +916,6 @@ export function HydrationScreen({
   const completeOnce = useRef(false);
   const completedDeliveryIds = useRef(new Set<string>());
 
-  const briefingRemaining = Math.max(
-    0,
-    Math.ceil((briefingEndsAt - now) / 1000),
-  );
   const briefingReady = now >= briefingEndsAt;
   const remaining = briefingReady
     ? calculateBreakRemaining(startedAt, now, spentCommandSeconds)
@@ -916,15 +927,27 @@ export function HydrationScreen({
   }, []);
 
   useEffect(() => {
-    if (briefingReady && remaining <= 0 && !completeOnce.current) {
+    if (
+      briefingReady &&
+      remaining <= 0 &&
+      !pendingDelivery &&
+      !completeOnce.current
+    ) {
       completeOnce.current = true;
       const timeout = window.setTimeout(onComplete, 650);
       return () => window.clearTimeout(timeout);
     }
-  }, [briefingReady, remaining, onComplete]);
+  }, [briefingReady, remaining, onComplete, pendingDelivery]);
 
+  const hydrationPendingOutgoingIds = new Set(
+    (match.pendingSubstitutions ?? []).map(
+      (substitution) => substitution.outgoingPlayerId,
+    ),
+  );
   const selectedPlayer = match.players.find(
-    (player) => player.id === selectedPlayerId,
+    (player) =>
+      player.id === selectedPlayerId &&
+      !hydrationPendingOutgoingIds.has(player.id),
   );
   const definition = selectedCommand
     ? COMMANDS[selectedCommand]
@@ -933,9 +956,13 @@ export function HydrationScreen({
     (player) => player.side === "home" && player.onField,
   );
   const allowedPositions = definition?.targetPositions;
+  const allowedDetailedPositions = definition?.targetDetailedPositions;
   const eligiblePlayers = homePlayers.filter(
     (player) =>
+      !hydrationPendingOutgoingIds.has(player.id) &&
       (!allowedPositions || allowedPositions.includes(player.position)) &&
+      (!allowedDetailedPositions ||
+        allowedDetailedPositions.includes(player.detailedPosition)) &&
       (positionFilter === "ALL" || player.position === positionFilter),
   );
   const averageUnderstanding =
@@ -1013,7 +1040,7 @@ export function HydrationScreen({
       return;
     }
     if (definition.kind === "ATTACK_WIDE" && !attackDirection) {
-      setMessage("공격할 측면을 왼쪽 또는 오른쪽으로 지정하십시오.");
+      setMessage("공격할 측면을 왼쪽, 오른쪽 또는 양쪽으로 지정하십시오.");
       return;
     }
     if (!briefingReady || pendingDelivery) return;
@@ -1043,7 +1070,7 @@ export function HydrationScreen({
 
   const switchBreakTactic = (slot: "sub1" | "sub2") => {
     const cost = slot === "sub1" ? 18 : 32;
-    if (!briefingReady || pendingDelivery || remaining < cost) {
+    if (pendingDelivery || remaining < cost) {
       setMessage(`전술 전환에 필요한 ${cost}초가 부족합니다.`);
       return;
     }
@@ -1113,7 +1140,7 @@ export function HydrationScreen({
             <div className="panel-title-row tight">
               <div>
                 <span>YOUR NOTES</span>
-                <h2>내가 본 문제</h2>
+                <h2>경기 메모</h2>
               </div>
             </div>
             <div className="memo-paper">
@@ -1159,7 +1186,9 @@ export function HydrationScreen({
           <div className="panel-title-row">
             <div>
               <span>SELECT TARGET</span>
-              <h2>누구에게 말할 것인가</h2>
+              <h2>
+                {definition?.needsPlayer ? "지시 대상 선수" : "팀 전체 지시"}
+              </h2>
             </div>
             {selectedPlayer && (
               <div className="selected-target">
@@ -1211,9 +1240,13 @@ export function HydrationScreen({
           <div className="break-player-chips">
             {(definition?.needsPlayer ? eligiblePlayers : homePlayers).map((player) => (
               <button
+                type="button"
                 key={player.id}
+                disabled={!definition?.needsPlayer}
                 className={selectedPlayerId === player.id ? "is-selected" : ""}
-                onClick={() => setSelectedPlayerId(player.id)}
+                onClick={() => {
+                  if (definition?.needsPlayer) setSelectedPlayerId(player.id);
+                }}
               >
                 <span>{player.number}</span>
                 {player.name}
@@ -1271,7 +1304,9 @@ export function HydrationScreen({
                     setSelectedPlayerId(undefined);
                     setPositionFilter(
                       next && COMMANDS[next].needsPlayer
-                        ? (COMMANDS[next].targetPositions?.[0] ?? "ALL")
+                        ? COMMANDS[next].targetDetailedPositions
+                          ? "ALL"
+                          : (COMMANDS[next].targetPositions?.[0] ?? "ALL")
                         : "ALL",
                     );
                     if (next !== "ATTACK_WIDE") setAttackDirection(undefined);
@@ -1279,7 +1314,7 @@ export function HydrationScreen({
                 >
                   <span>
                     <small>
-                      {command.needsPlayer ? "개별 지시" : "팀 전체 지시"}
+                      {command.category}
                       {delivered ? " · 전달 완료" : ""}
                     </small>
                     <strong>{command.label}</strong>
@@ -1312,6 +1347,13 @@ export function HydrationScreen({
                         onClick={() => setAttackDirection("left")}
                       >
                         ← 왼쪽 측면
+                      </button>
+                      <button
+                        type="button"
+                        className={attackDirection === "both" ? "is-active" : ""}
+                        onClick={() => setAttackDirection("both")}
+                      >
+                        ↔ 양쪽 측면
                       </button>
                       <button
                         type="button"
@@ -1430,28 +1472,13 @@ export function HydrationScreen({
             <SubTacticSwitcher
               match={match}
               costType="seconds"
-              disabled={!briefingReady || Boolean(pendingDelivery)}
+              disabled={Boolean(pendingDelivery)}
               availableBudget={remaining}
               onSwitch={switchBreakTactic}
             />
           )}
         </aside>
       </section>
-      {!briefingReady && (
-        <div className="break-intro" aria-live="assertive">
-          <div>
-            <span>AUTO BREAK · SITUATION SCAN</span>
-            <strong>{breakHeadline(match)}</strong>
-            <p>
-              슈팅 {match.metrics.homeShots}:{match.metrics.awayShots} · 평균
-              체력 {Math.round(averageTeamStamina(match))} · 상대 측면 위협{" "}
-              {match.metrics.awayRightThreat}
-            </p>
-            <b>{briefingRemaining}</b>
-            <small>카운트가 끝나면 180초가 흐르기 시작합니다.</small>
-          </div>
-        </div>
-      )}
       {detailPlayerId && (
         <PlayerDetailDialog
           player={
@@ -1489,7 +1516,83 @@ interface HalfTimeScreenProps {
   onCancelSubstitution: (pendingId: string) => void;
   onSwitchSubTactic: (slot: "sub1" | "sub2") => void;
   onMovePlayer: (playerId: string, x: number, y: number) => void;
+  onSwapPlayers: (
+    firstPlayerId: string,
+    secondPlayerId: string,
+    firstOriginX: number,
+    firstOriginY: number,
+  ) => void;
   onContinue: () => void;
+}
+
+type HalfTimeSubTacticSlot = "sub1" | "sub2";
+type HalfTimeActionCategory = "team-spirit" | "team-tactic" | "individual";
+
+interface HalfTimeAction {
+  id: string;
+  category: HalfTimeActionCategory;
+  label: string;
+  detail: string;
+  cost: number;
+  kind?: CommandKind;
+  recovery?: boolean;
+  needsPlayer?: boolean;
+  exclusiveGroup?: string;
+  available: boolean;
+}
+
+const halfTimeTacticCost = (slot: HalfTimeSubTacticSlot) =>
+  slot === "sub1" ? 2 : 4;
+
+export function toggleHalfTimeSubTactic(
+  selectedSlot: HalfTimeSubTacticSlot | undefined,
+  requestedSlot: HalfTimeSubTacticSlot,
+  remainingAp: number,
+): { selectedSlot: HalfTimeSubTacticSlot | undefined; remainingAp: number } {
+  if (selectedSlot === requestedSlot) {
+    return {
+      selectedSlot: undefined,
+      remainingAp: remainingAp + halfTimeTacticCost(requestedSlot),
+    };
+  }
+
+  const refundableAp = selectedSlot ? halfTimeTacticCost(selectedSlot) : 0;
+  const requestedCost = halfTimeTacticCost(requestedSlot);
+  if (remainingAp + refundableAp < requestedCost) {
+    return { selectedSlot, remainingAp };
+  }
+
+  return {
+    selectedSlot: requestedSlot,
+    remainingAp: remainingAp + refundableAp - requestedCost,
+  };
+}
+
+export function toggleHalfTimePlayerTarget(
+  selectedIds: string[],
+  playerId: string,
+  allowMultiple: boolean,
+): string[] {
+  if (!allowMultiple) return [playerId];
+  const alreadySelected = selectedIds.includes(playerId);
+  return alreadySelected
+    ? selectedIds.filter((id) => id !== playerId)
+    : [...selectedIds, playerId];
+}
+
+export function updateHalfTimeConserveTargets(
+  selectedIds: string[],
+  playerId: string,
+  remainingAp: number,
+): { selectedIds: string[]; remainingAp: number } {
+  const alreadySelected = selectedIds.includes(playerId);
+  if (!alreadySelected && remainingAp < 1) {
+    return { selectedIds, remainingAp };
+  }
+  return {
+    selectedIds: toggleHalfTimePlayerTarget(selectedIds, playerId, true),
+    remainingAp: remainingAp + (alreadySelected ? 1 : -1),
+  };
 }
 
 export function HalfTimeScreen({
@@ -1500,10 +1603,15 @@ export function HalfTimeScreen({
   onCancelSubstitution,
   onSwitchSubTactic,
   onMovePlayer,
+  onSwapPlayers,
   onContinue,
 }: HalfTimeScreenProps) {
-  const [remainingAp, setRemainingAp] = useState(10);
+  const [remainingAp, setRemainingAp] = useState(match.halfTimeAp ?? 10);
   const [selectedActions, setSelectedActions] = useState<string[]>([]);
+  const [selectedSubTactic, setSelectedSubTactic] =
+    useState<HalfTimeSubTacticSlot>();
+  const [isCommitting, setIsCommitting] = useState(false);
+  const commitOnce = useRef(false);
   const [halftimeView, setHalftimeView] = useState<
     "actions" | "players" | "tactics"
   >(
@@ -1512,129 +1620,335 @@ export function HalfTimeScreen({
   const [rosterSide, setRosterSide] = useState<"home" | "away">("home");
   const [rosterPlayerId, setRosterPlayerId] = useState<string>();
   const [compareBasePlayerId, setCompareBasePlayerId] = useState<string>();
-  const forward = useMemo(
+  const [actionTargets, setActionTargets] = useState<Record<string, string[]>>(
+    {},
+  );
+  const [targetingActionId, setTargetingActionId] = useState<string>();
+  const [halfTimeAttackSide, setHalfTimeAttackSide] =
+    useState<Exclude<AttackSide, "center">>("both");
+  const pendingOutgoingIds = useMemo(
     () =>
-      match.players.find(
-        (player) =>
-          player.side === "home" &&
-          player.onField &&
-          player.position === "FW",
+      new Set(
+        (match.pendingSubstitutions ?? []).map(
+          (substitution) => substitution.outgoingPlayerId,
+        ),
       ),
-    [match.players],
+    [match.pendingSubstitutions],
   );
-  const winger = useMemo(
+  const homePlayers = useMemo(
     () =>
-      match.players.find(
+      match.players.filter(
         (player) =>
           player.side === "home" &&
           player.onField &&
-          (player.detailedPosition === "LW" ||
-            player.detailedPosition === "RW" ||
-            player.detailedPosition === "LM" ||
-            player.detailedPosition === "RM"),
-      ) ?? forward,
-    [forward, match.players],
+          !pendingOutgoingIds.has(player.id),
+      ),
+    [match.players, pendingOutgoingIds],
   );
-  const lowestStamina = useMemo(
-    () =>
-      match.players
-        .filter((player) => player.side === "home" && player.onField)
-        .sort((a, b) => a.currentStamina - b.currentStamina)[0],
-    [match.players],
-  );
-  const actions = [
+  const eligiblePlayersFor = (kind?: CommandKind) => {
+    if (!kind) return [];
+    const definition = COMMANDS[kind];
+    return homePlayers.filter(
+      (player) =>
+        (!definition.targetPositions ||
+          definition.targetPositions.includes(player.position)) &&
+        (!definition.targetDetailedPositions ||
+          definition.targetDetailedPositions.includes(player.detailedPosition)),
+    );
+  };
+  const selectedTargetLabel = (actionId: string) => {
+    const names = (actionTargets[actionId] ?? [])
+      .map((playerId) =>
+        match.players.find((player) => player.id === playerId)?.name,
+      )
+      .filter(Boolean);
+    if (!names.length) return undefined;
+    return names.length === 1 ? names[0] : `${names[0]} 외 ${names.length - 1}명`;
+  };
+  const actions: HalfTimeAction[] = [
     {
-      id: "adjust",
-      label: "오른쪽 측면 전환",
-      detail: "오른쪽 폭을 넓혀 공격 방향을 전환하십시오.",
-      cost: 2,
-      run: () => onApplyCommand("ATTACK_WIDE", undefined, 0, "right"),
-    },
-    {
-      id: "individual",
-      label: "개인 특별 지시",
-      detail: `${forward?.name ?? "공격수"} 중앙 침투`,
-      cost: 2,
-      run: () => onApplyCommand("CENTRAL_RUN", forward?.id, 0),
+      id: "speech",
+      category: "team-spirit",
+      label: "팀 전체 연설",
+      detail: "집중력과 결속을 강화합니다.",
+      cost: 5,
+      kind: "CAPTAIN_RALLY",
+      available: true,
     },
     {
       id: "recover",
+      category: "team-spirit",
       label: "휴식·회복 집중",
-      detail: "후반 체력 회복량 증가",
+      detail: "후반전에 사용할 추가 체력을 확보합니다.",
       cost: 3,
-      run: onRecovery,
+      recovery: true,
+      available: true,
     },
     {
-      id: "speech",
-      label: "팀 전체 연설",
-      detail: "집중력과 결속 강화",
-      cost: 5,
-      run: () => onApplyCommand("CAPTAIN_RALLY", undefined, 0),
+      id: "adjust",
+      category: "team-tactic",
+      label: "측면 넓게 활용",
+      detail: `${halfTimeAttackSide === "left" ? "왼쪽" : halfTimeAttackSide === "right" ? "오른쪽" : "양쪽"} 측면의 폭을 넓혀 공격합니다.`,
+      cost: 2,
+      kind: "ATTACK_WIDE",
+      available: true,
+    },
+    {
+      id: "compact",
+      category: "team-tactic",
+      label: "중앙 밀집 점유",
+      detail: "선수 간격을 좁혀 중앙 점유율을 높입니다.",
+      cost: 2,
+      kind: "COMPACT_POSSESSION",
+      available: true,
+    },
+    {
+      id: "short-passing",
+      category: "team-tactic",
+      label: "숏패스 위주",
+      detail: "가까운 동료를 활용해 소유권을 안정시킵니다.",
+      cost: 2,
+      kind: "SHORT_PASSING",
+      exclusiveGroup: "passing-style",
+      available: true,
+    },
+    {
+      id: "long-ball",
+      category: "team-tactic",
+      label: "롱볼 축구",
+      detail: "후방에서 전방으로 긴 패스를 빠르게 투입합니다.",
+      cost: 2,
+      kind: "LONG_BALL",
+      exclusiveGroup: "passing-style",
+      available: true,
     },
     {
       id: "press",
+      category: "team-tactic",
       label: "전방 압박 강화",
       detail: "상대 진영부터 공을 되찾도록 지시하십시오.",
       cost: 2,
-      run: () => onApplyCommand("PRESS_HIGHER", undefined, 0),
+      kind: "PRESS_HIGHER",
+      available: true,
     },
     {
       id: "lower",
+      category: "team-tactic",
       label: "수비 라인 조정",
       detail: "수비 기준선을 내려 뒷공간을 보호하십시오.",
       cost: 2,
-      run: () => onApplyCommand("LOWER_LINE", undefined, 0),
+      kind: "LOWER_LINE",
+      available: true,
+    },
+    {
+      id: "individual",
+      category: "individual",
+      label: "중앙 침투",
+      detail: `${selectedTargetLabel("individual") ?? "공격수"}에게 중앙 침투를 지시합니다.`,
+      cost: 2,
+      kind: "CENTRAL_RUN",
+      needsPlayer: true,
+      available: eligiblePlayersFor("CENTRAL_RUN").length > 0,
     },
     {
       id: "track",
+      category: "individual",
       label: "윙어 수비 가담",
-      detail: `${winger?.name ?? "측면 선수"}에게 풀백 추적을 지시하십시오.`,
+      detail: `${selectedTargetLabel("track") ?? "측면 선수"}에게 풀백 추적을 지시합니다.`,
       cost: 2,
-      run: () => onApplyCommand("WINGER_TRACK", winger?.id, 0),
+      kind: "WINGER_TRACK",
+      needsPlayer: true,
+      available: eligiblePlayersFor("WINGER_TRACK").length > 0,
     },
     {
       id: "conserve",
+      category: "individual",
       label: "개인 체력 안배",
-      detail: `${lowestStamina?.name ?? "체력 저하 선수"}의 움직임을 조절하십시오.`,
+      detail: `${selectedTargetLabel("conserve") ?? "선수"}의 체력 소모를 줄입니다. 여러 명을 선택할 수 있으며 대가는 없습니다.`,
       cost: 1,
-      run: () => onApplyCommand("CONSERVE_ENERGY", lowestStamina?.id, 0),
+      kind: "CONSERVE_ENERGY",
+      needsPlayer: true,
+      available: eligiblePlayersFor("CONSERVE_ENERGY").length > 0,
     },
   ];
 
-  const handleAction = (action: (typeof actions)[number]) => {
+  const handleAction = (action: HalfTimeAction) => {
     if (selectedActions.includes(action.id)) {
-      setRemainingAp((current) => current + action.cost);
+      const refund =
+        action.kind === "CONSERVE_ENERGY"
+          ? Math.max(1, actionTargets[action.id]?.length ?? 0)
+          : action.cost;
+      setRemainingAp((current) => current + refund);
       setSelectedActions((current) =>
         current.filter((actionId) => actionId !== action.id),
       );
+      if (action.needsPlayer) {
+        setActionTargets((current) => ({ ...current, [action.id]: [] }));
+      }
+      if (targetingActionId === action.id) setTargetingActionId(undefined);
       return;
     }
-    if (remainingAp < action.cost) return;
-    setRemainingAp((current) => current - action.cost);
-    setSelectedActions((current) => [...current, action.id]);
+    const exclusiveActions = action.exclusiveGroup
+      ? actions.filter(
+          (candidate) =>
+            candidate.exclusiveGroup === action.exclusiveGroup &&
+            selectedActions.includes(candidate.id),
+        )
+      : [];
+    const refundableAp = exclusiveActions.reduce(
+      (total, candidate) => total + candidate.cost,
+      0,
+    );
+    if (!action.available || remainingAp + refundableAp < action.cost) return;
+    setRemainingAp((current) => current + refundableAp - action.cost);
+    setSelectedActions((current) => [
+      ...current.filter(
+        (actionId) =>
+          !exclusiveActions.some((candidate) => candidate.id === actionId),
+      ),
+      action.id,
+    ]);
+    if (action.needsPlayer) {
+      const eligiblePlayers = eligiblePlayersFor(action.kind);
+      const currentTargets = actionTargets[action.id] ?? [];
+      if (
+        !currentTargets.length ||
+        currentTargets.some(
+          (playerId) =>
+            !eligiblePlayers.some((player) => player.id === playerId),
+        )
+      ) {
+        setActionTargets((current) => ({
+          ...current,
+          [action.id]: [eligiblePlayers[0].id],
+        }));
+      }
+      setTargetingActionId(action.id);
+    }
   };
 
   const commitHalfTime = () => {
+    if (commitOnce.current) return;
+    commitOnce.current = true;
+    setIsCommitting(true);
+    if (selectedSubTactic) onSwitchSubTactic(selectedSubTactic);
     actions
       .filter((action) => selectedActions.includes(action.id))
-      .forEach((action) => action.run());
+      .filter((action) => action.available)
+      .forEach((action) => {
+        if (action.recovery) {
+          onRecovery();
+          return;
+        }
+        if (!action.kind) return;
+        const targetIds = action.needsPlayer
+          ? (actionTargets[action.id] ?? [])
+          : [undefined];
+        targetIds.forEach((targetPlayerId) =>
+          onApplyCommand(
+            action.kind!,
+            targetPlayerId,
+            0,
+            action.kind === "ATTACK_WIDE" ? halfTimeAttackSide : undefined,
+          ),
+        );
+      });
     onContinue();
   };
 
   const switchHalfTimeTactic = (slot: "sub1" | "sub2") => {
-    const cost = slot === "sub1" ? 2 : 4;
-    if (remainingAp < cost) return;
-    onSwitchSubTactic(slot);
-    setRemainingAp((current) => current - cost);
+    const next = toggleHalfTimeSubTactic(
+      selectedSubTactic,
+      slot,
+      remainingAp,
+    );
+    setSelectedSubTactic(next.selectedSlot);
+    setRemainingAp(next.remainingAp);
   };
+
+  const targetingAction = actions.find(
+    (action) => action.id === targetingActionId,
+  );
+  const targetingEligiblePlayers = eligiblePlayersFor(targetingAction?.kind);
+  const selectedActionTargetIds = targetingAction
+    ? (actionTargets[targetingAction.id] ?? [])
+    : [];
+  const selectedActionTargetId = selectedActionTargetIds[0];
+  const selectActionTarget = (playerId: string) => {
+    if (
+      !targetingAction ||
+      !targetingEligiblePlayers.some((player) => player.id === playerId)
+    ) {
+      return;
+    }
+    if (targetingAction.kind === "CONSERVE_ENERGY") {
+      const selectedIds = actionTargets[targetingAction.id] ?? [];
+      const next = updateHalfTimeConserveTargets(
+        selectedIds,
+        playerId,
+        remainingAp,
+      );
+      if (next.selectedIds === selectedIds) return;
+      setActionTargets((current) => ({
+        ...current,
+        [targetingAction.id]: next.selectedIds,
+      }));
+      setRemainingAp(next.remainingAp);
+      if (!next.selectedIds.length) {
+        setSelectedActions((current) =>
+          current.filter((actionId) => actionId !== targetingAction.id),
+        );
+        setTargetingActionId(undefined);
+      }
+      return;
+    }
+    setActionTargets((current) => {
+      const selectedIds = current[targetingAction.id] ?? [];
+      const nextIds = toggleHalfTimePlayerTarget(
+        selectedIds,
+        playerId,
+        false,
+      );
+      if (nextIds === selectedIds) return current;
+      return {
+        ...current,
+        [targetingAction.id]: nextIds,
+      };
+    });
+  };
+  const actionGroups: Array<{
+    category: HalfTimeActionCategory;
+    label: string;
+    description: string;
+  }> = [
+    {
+      category: "team-spirit",
+      label: "팀 사기·결속",
+      description: "선수단의 집중력, 결속과 회복을 관리합니다.",
+    },
+    {
+      category: "team-tactic",
+      label: "팀 전체 지시",
+      description: "후반전의 팀 단위 운영 방식을 정합니다.",
+    },
+    {
+      category: "individual",
+      label: "개인 지시",
+      description: "선택한 선수에게 구체적인 역할을 전달합니다.",
+    },
+  ];
+  const selectedPersonalActions = actions.filter(
+    (action) =>
+      action.category === "individual" && selectedActions.includes(action.id),
+  );
 
   return (
     <main className="halftime-shell">
       <header className="halftime-header">
         <span className="brand-mark">잠.물.마</span>
         <div>
-          <p className="eyebrow">HALF TIME · STRATEGIC RESET</p>
-          <h1>이번에는 시간이 아니라 조합의 문제입니다.</h1>
+          <p className="eyebrow">HALF TIME · TEAM TALK</p>
+          <h1>하프타임 전술 조정</h1>
         </div>
         <div className="ap-counter">
           <span>남은 액션 포인트</span>
@@ -1655,52 +1969,66 @@ export function HalfTimeScreen({
               <strong>{match.awayTeam.shortName}</strong>
             </div>
           </div>
+          <div className="halftime-stat-block">
+            <span>전반 경기 기록</span>
+            <MatchStatsTable
+              metrics={match.metrics}
+              awayLabel={match.awayTeam.shortName}
+              compact
+            />
+          </div>
           <TacticalBoard
             match={match}
             compact
             selectedPlayerId={
-              halftimeView === "players" ? rosterPlayerId : undefined
+              halftimeView === "players"
+                ? rosterPlayerId
+                : halftimeView === "actions"
+                  ? selectedActionTargetId
+                  : undefined
             }
-            selectableSide={rosterSide}
-            focusSide={halftimeView === "players" ? rosterSide : undefined}
+            selectedPlayerIds={
+              halftimeView === "actions" && targetingAction
+                ? selectedActionTargetIds
+                : undefined
+            }
+            selectableSide={halftimeView === "actions" ? "home" : rosterSide}
+            focusSide={
+              halftimeView === "players"
+                ? rosterSide
+                : halftimeView === "actions" && targetingAction
+                  ? "home"
+                  : undefined
+            }
+            highlightedPlayerIds={
+              halftimeView === "actions" && targetingAction
+                ? targetingEligiblePlayers.map((player) => player.id)
+                : undefined
+            }
             editable={halftimeView === "players" && rosterSide === "home"}
             onSelectPlayer={
-              halftimeView === "players" ? setRosterPlayerId : undefined
+              halftimeView === "players"
+                ? setRosterPlayerId
+                : halftimeView === "actions" && targetingAction
+                  ? selectActionTarget
+                  : undefined
             }
             onMovePlayer={
               halftimeView === "players" && rosterSide === "home"
                 ? onMovePlayer
                 : undefined
             }
+            onSwapPlayers={
+              halftimeView === "players" && rosterSide === "home"
+                ? onSwapPlayers
+                : undefined
+            }
           />
           {halftimeView === "players" && rosterSide === "home" && (
             <p className="halftime-position-note">
-              선수를 드래그하여 후반전 위치를 조정하십시오.
+              빈 공간에 놓으면 이동하고, 다른 선수 위에 놓으면 위치를 서로 바꿉니다.
             </p>
           )}
-          <div className="halftime-metrics">
-            <div>
-              <span>패스 성공</span>
-              <strong>
-                {match.metrics.homePassAttempts
-                  ? Math.round(
-                      (match.metrics.homePassSuccess /
-                        match.metrics.homePassAttempts) *
-                        100,
-                    )
-                  : 0}
-                %
-              </strong>
-            </div>
-            <div>
-              <span>슈팅</span>
-              <strong>{match.metrics.homeShots}</strong>
-            </div>
-            <div>
-              <span>평균 체력</span>
-              <strong>{Math.round(averageTeamStamina(match))}</strong>
-            </div>
-          </div>
         </div>
 
         <div className="halftime-actions">
@@ -1732,28 +2060,141 @@ export function HalfTimeScreen({
               <div className="panel-title-row">
                 <div>
                   <span>ALLOCATE ACTION POINTS</span>
-                  <h2>무엇에 시간을 더 쓸 것인가</h2>
+                  <h2>후반전 운영 선택</h2>
                 </div>
               </div>
-              <div className="ap-action-grid">
-                {actions.map((action) => {
-                  const used = selectedActions.includes(action.id);
-                  return (
-                    <button
-                      key={action.id}
-                      disabled={!used && remainingAp < action.cost}
-                      className={used ? "is-used" : ""}
-                      onClick={() => handleAction(action)}
-                    >
-                      <span>
-                        {used ? "선택됨 · 재클릭하여 취소" : `${action.cost} AP`}
-                      </span>
-                      <strong>{action.label}</strong>
-                      <p>{action.detail}</p>
-                    </button>
-                  );
-                })}
+              <div className="halftime-action-groups">
+                {actionGroups.map((group) => (
+                  <section key={group.category} className="halftime-action-group">
+                    <header>
+                      <strong>{group.label}</strong>
+                      <span>{group.description}</span>
+                    </header>
+                    <div className="ap-action-grid">
+                      {actions
+                        .filter((action) => action.category === group.category)
+                        .map((action) => {
+                          const used = selectedActions.includes(action.id);
+                          const refundableAp = action.exclusiveGroup
+                            ? actions
+                                .filter(
+                                  (candidate) =>
+                                    candidate.exclusiveGroup ===
+                                      action.exclusiveGroup &&
+                                    selectedActions.includes(candidate.id),
+                                )
+                                .reduce(
+                                  (total, candidate) => total + candidate.cost,
+                                  0,
+                                )
+                            : 0;
+                          return (
+                            <button
+                              type="button"
+                              key={action.id}
+                              disabled={
+                                !action.available ||
+                                (!used &&
+                                  remainingAp + refundableAp < action.cost)
+                              }
+                              className={used ? "is-used" : ""}
+                              onClick={() => handleAction(action)}
+                            >
+                              <span>
+                                {used
+                                  ? action.kind === "CONSERVE_ENERGY"
+                                    ? `${actionTargets[action.id]?.length ?? 0}명 · ${actionTargets[action.id]?.length ?? 0} AP · 재클릭하여 전체 취소`
+                                    : "선택됨 · 재클릭하여 취소"
+                                  : action.kind === "CONSERVE_ENERGY"
+                                    ? "선수당 1 AP"
+                                    : `${action.cost} AP`}
+                              </span>
+                              <strong>{action.label}</strong>
+                              <p>{action.detail}</p>
+                            </button>
+                          );
+                        })}
+                    </div>
+                  </section>
+                ))}
               </div>
+              {selectedActions.includes("adjust") && (
+                <div className="halftime-action-config">
+                  <div className="attack-direction-picker">
+                    <span>활용할 측면을 선택하십시오</span>
+                    <div>
+                      <button
+                        type="button"
+                        className={halfTimeAttackSide === "left" ? "is-active" : ""}
+                        onClick={() => setHalfTimeAttackSide("left")}
+                      >
+                        ← 왼쪽
+                      </button>
+                      <button
+                        type="button"
+                        className={halfTimeAttackSide === "both" ? "is-active" : ""}
+                        onClick={() => setHalfTimeAttackSide("both")}
+                      >
+                        ↔ 양쪽 모두
+                      </button>
+                      <button
+                        type="button"
+                        className={halfTimeAttackSide === "right" ? "is-active" : ""}
+                        onClick={() => setHalfTimeAttackSide("right")}
+                      >
+                        오른쪽 →
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+              {selectedPersonalActions.length > 0 && (
+                <div className="halftime-action-config halftime-target-config">
+                  <span>개인 지시 대상 선택</span>
+                  <div className="halftime-target-tabs">
+                    {selectedPersonalActions.map((action) => (
+                      <button
+                        type="button"
+                        key={action.id}
+                        className={
+                          targetingActionId === action.id ? "is-active" : ""
+                        }
+                        onClick={() => setTargetingActionId(action.id)}
+                      >
+                        {action.label}
+                      </button>
+                    ))}
+                  </div>
+                  {targetingAction && (
+                    <>
+                      <p>
+                        전술판이나 아래 명단에서 {targetingAction.label} 대상을
+                        선택하십시오.
+                        {targetingAction.kind === "CONSERVE_ENERGY" &&
+                          " 체력 안배는 여러 명을 동시에 선택할 수 있습니다."}
+                      </p>
+                      <div className="break-player-chips">
+                        {targetingEligiblePlayers.map((player) => (
+                          <button
+                            type="button"
+                            key={player.id}
+                            className={
+                              selectedActionTargetIds.includes(player.id)
+                                ? "is-selected"
+                                : ""
+                            }
+                            onClick={() => selectActionTarget(player.id)}
+                          >
+                            <span>{player.number}</span>
+                            {player.name}
+                            <b>{Math.round(player.currentStamina)}</b>
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
             </>
           ) : halftimeView === "players" ? (
             <div className="halftime-roster-view">
@@ -1796,15 +2237,22 @@ export function HalfTimeScreen({
             <SubTacticSwitcher
               match={match}
               costType="ap"
-              availableBudget={remainingAp}
+              availableBudget={
+                remainingAp +
+                (selectedSubTactic
+                  ? halfTimeTacticCost(selectedSubTactic)
+                  : 0)
+              }
+              pendingSlot={selectedSubTactic}
               onSwitch={switchHalfTimeTactic}
             />
           )}
           <button
             className="button button-primary button-wide"
             onClick={commitHalfTime}
+            disabled={isCommitting}
           >
-            선택 적용 후 후반전 시작
+            {isCommitting ? "후반전 준비 중" : "선택 적용 후 후반전 시작"}
             <span aria-hidden="true">→</span>
           </button>
         </div>

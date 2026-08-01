@@ -1,4 +1,5 @@
 import type {
+  AttackSide,
   AppliedCommand,
   CommandEvaluation,
   CommandDefinition,
@@ -24,7 +25,7 @@ export const COMMANDS: Record<CommandKind, CommandDefinition> = {
   PRESS_HIGHER: {
     kind: "PRESS_HIGHER",
     label: "압박 강도 높이기",
-    category: "팀 지시",
+    category: "팀 전체 지시",
     description: "상대 진영부터 더 적극적으로 공을 되찾습니다.",
     minCost: 28,
     maxCost: 42,
@@ -35,7 +36,7 @@ export const COMMANDS: Record<CommandKind, CommandDefinition> = {
   LOWER_LINE: {
     kind: "LOWER_LINE",
     label: "수비 라인 내리기",
-    category: "라인 지시",
+    category: "팀 전체 지시",
     description: "최종 수비 라인을 내려 뒷공간을 보호합니다.",
     minCost: 20,
     maxCost: 30,
@@ -46,13 +47,46 @@ export const COMMANDS: Record<CommandKind, CommandDefinition> = {
   ATTACK_WIDE: {
     kind: "ATTACK_WIDE",
     label: "공격 방향 전환",
-    category: "팀 지시",
+    category: "팀 전체 지시",
     description: "혼잡한 중앙 대신 넓은 측면을 우선 공략합니다.",
     minCost: 28,
     maxCost: 42,
     needsPlayer: false,
     effect: "상대 압박을 우회하고 측면 진입 빈도가 증가합니다.",
     tradeoff: "중앙에서 바로 슈팅으로 이어지는 빈도가 감소합니다.",
+  },
+  COMPACT_POSSESSION: {
+    kind: "COMPACT_POSSESSION",
+    label: "중앙 밀집 점유",
+    category: "팀 전체 지시",
+    description: "선수 간격을 좁혀 중앙에서 짧은 지원 경로를 만듭니다.",
+    minCost: 24,
+    maxCost: 36,
+    needsPlayer: false,
+    effect: "중앙 점유와 패스 연결 안정성이 상승합니다.",
+    tradeoff: "측면 폭과 빠른 전환의 위력이 감소합니다.",
+  },
+  LONG_BALL: {
+    kind: "LONG_BALL",
+    label: "롱볼 축구",
+    category: "팀 전체 지시",
+    description: "후방에서 전방으로 빠르게 긴 패스를 투입합니다.",
+    minCost: 22,
+    maxCost: 34,
+    needsPlayer: false,
+    effect: "한 번의 패스로 더 먼 지역까지 전진할 수 있습니다.",
+    tradeoff: "패스 성공률이 낮아지고 소유권 상실 위험이 커집니다.",
+  },
+  SHORT_PASSING: {
+    kind: "SHORT_PASSING",
+    label: "숏패스 위주",
+    category: "팀 전체 지시",
+    description: "가까운 동료를 활용해 짧고 안전하게 전진합니다.",
+    minCost: 22,
+    maxCost: 34,
+    needsPlayer: false,
+    effect: "패스 성공률과 점유 안정성이 상승합니다.",
+    tradeoff: "전진 속도와 직접적인 득점 기회 생성이 느려집니다.",
   },
   WINGER_TRACK: {
     kind: "WINGER_TRACK",
@@ -63,6 +97,7 @@ export const COMMANDS: Record<CommandKind, CommandDefinition> = {
     maxCost: 18,
     needsPlayer: true,
     targetPositions: ["MF", "FW"],
+    targetDetailedPositions: ["LW", "RW", "LM", "RM"],
     effect: "측면 수비와 수적 균형이 안정됩니다.",
     tradeoff: "선택 선수의 체력 소모와 역습 속도가 저하됩니다.",
   },
@@ -88,12 +123,12 @@ export const COMMANDS: Record<CommandKind, CommandDefinition> = {
     needsPlayer: true,
     targetPositions: ["GK", "DF", "MF", "FW"],
     effect: "선택 선수의 이후 체력 소모가 감소합니다.",
-    tradeoff: "압박 범위와 공격 가담이 소폭 감소합니다.",
+    tradeoff: "없음",
   },
   CAPTAIN_RALLY: {
     kind: "CAPTAIN_RALLY",
     label: "주장에게 결속 요청",
-    category: "주장·사기",
+    category: "팀 사기·결속",
     description: "주장에게 집중력과 수비 간격 정리를 위임합니다.",
     minCost: 24,
     maxCost: 36,
@@ -118,7 +153,13 @@ export const BREAK_COMMAND_KINDS = (
   Object.keys(COMMANDS) as CommandKind[]
 ).filter(
   (kind) => kind !== "HALFTIME_RECOVERY" && kind !== "PREPARED_PLAN",
-);
+).sort((first, second) => {
+  const categoryOrder = ["팀 사기·결속", "팀 전체 지시", "개인 지시"];
+  return (
+    categoryOrder.indexOf(COMMANDS[first].category) -
+    categoryOrder.indexOf(COMMANDS[second].category)
+  );
+});
 
 interface CostContext {
   player?: MatchPlayer;
@@ -174,7 +215,7 @@ export function calculateCommandCost(
 const updateTactic = (
   tactic: TacticState,
   kind: CommandKind,
-  attackSide?: "left" | "right",
+  attackSide?: Exclude<AttackSide, "center">,
 ): TacticState => {
   switch (kind) {
     case "PREPARED_PLAN":
@@ -202,6 +243,25 @@ const updateTactic = (
         ...tactic,
         width: Math.min(86, tactic.width + 20),
         attackSide: attackSide ?? tactic.attackSide,
+      };
+    case "COMPACT_POSSESSION":
+      return {
+        ...tactic,
+        width: Math.max(34, tactic.width - 18),
+        tempo: Math.max(38, tactic.tempo - 6),
+        attackSide: "center",
+      };
+    case "LONG_BALL":
+      return {
+        ...tactic,
+        passingStyle: "long",
+        tempo: Math.min(86, tactic.tempo + 12),
+      };
+    case "SHORT_PASSING":
+      return {
+        ...tactic,
+        passingStyle: "short",
+        tempo: Math.max(36, tactic.tempo - 8),
       };
     case "CAPTAIN_RALLY":
       return {
@@ -245,12 +305,33 @@ export function applyCommand(
   kind: CommandKind,
   targetPlayerId: string | undefined,
   cost: number,
-  attackSide?: "left" | "right",
+  attackSide?: Exclude<AttackSide, "center">,
 ): MatchState {
+  if (
+    state.phase !== "HYDRATION_FIRST" &&
+    state.phase !== "HALF_TIME" &&
+    state.phase !== "HYDRATION_SECOND"
+  ) {
+    return state;
+  }
   const definition = COMMANDS[kind];
   const target = targetPlayerId
     ? state.players.find((player) => player.id === targetPlayerId)
     : undefined;
+  const validTarget =
+    !definition.needsPlayer ||
+    Boolean(
+      target &&
+        target.side === "home" &&
+        target.onField &&
+        (!definition.targetPositions ||
+          definition.targetPositions.includes(target.position)) &&
+        (!definition.targetDetailedPositions ||
+          definition.targetDetailedPositions.includes(
+            target.detailedPosition,
+          )),
+    );
+  if (!validTarget) return state;
   const command: AppliedCommand = {
     id: `command-${state.commands.length + 1}-${Math.round(state.gameMinute)}`,
     kind,
@@ -299,7 +380,7 @@ export function applyCommand(
     minute: Math.round(state.gameMinute),
     type: "TACTIC" as const,
     side: "home" as const,
-    text: `${target ? `${target.name}에게 ` : ""}${definition.label}${kind === "ATTACK_WIDE" && attackSide ? `(${attackSide === "left" ? "왼쪽" : "오른쪽"})` : ""} 지시를 전달했습니다.`,
+    text: `${target ? `${target.name}에게 ` : ""}${definition.label}${kind === "ATTACK_WIDE" && attackSide ? `(${attackSide === "left" ? "왼쪽" : attackSide === "right" ? "오른쪽" : "양쪽"})` : ""} 지시를 전달했습니다.`,
     emphasis: "important" as const,
   };
 
@@ -335,6 +416,8 @@ export function evaluateCommandImpact(
       awayTurnovers: 0,
       homeRightThreat: 0,
       awayRightThreat: 0,
+      homeLeftThreat: 0,
+      awayLeftThreat: 0,
       tacticalWins: 0,
     },
     defensiveLine: 50,
@@ -345,16 +428,16 @@ export function evaluateCommandImpact(
   const elapsed = Math.max(0, state.gameMinute - command.minute);
   const homeShots = metricDelta(state as MatchState, command, "homeShots");
   const awayShots = metricDelta(state as MatchState, command, "awayShots");
-  const homeThreat = metricDelta(
-    state as MatchState,
-    command,
-    "homeRightThreat",
-  );
-  const awayThreat = metricDelta(
-    state as MatchState,
-    command,
-    "awayRightThreat",
-  );
+  const homeThreat =
+    command.kind === "ATTACK_WIDE" && command.attackSide === "left"
+      ? metricDelta(state as MatchState, command, "homeLeftThreat")
+      : command.kind === "ATTACK_WIDE" && command.attackSide === "both"
+        ? metricDelta(state as MatchState, command, "homeLeftThreat") +
+          metricDelta(state as MatchState, command, "homeRightThreat")
+        : metricDelta(state as MatchState, command, "homeRightThreat");
+  const awayThreat =
+    metricDelta(state as MatchState, command, "awayRightThreat") +
+    metricDelta(state as MatchState, command, "awayLeftThreat");
   const awayTurnovers = metricDelta(
     state as MatchState,
     command,
@@ -423,6 +506,17 @@ export function evaluateCommandImpact(
         homeTurnovers * 3;
       headline = `측면 위협을 ${homeThreat}회 만들었습니다.`;
       detail = `지시 후 슈팅 ${homeShots}회, 공격권 상실 ${homeTurnovers}회입니다.`;
+      break;
+    case "COMPACT_POSSESSION":
+    case "SHORT_PASSING":
+      rawScore = 46 + passRate * 48 - homeTurnovers * 4;
+      headline = `지시 후 패스 성공률 ${Math.round(passRate * 100)}%`;
+      detail = `중앙 연결과 짧은 패스 이후 공격권 상실 ${homeTurnovers}회를 함께 반영했습니다.`;
+      break;
+    case "LONG_BALL":
+      rawScore = 45 + homeShots * 10 + homeThreat * 5 - homeTurnovers * 4;
+      headline = `롱볼 이후 슈팅을 ${homeShots}회 만들었습니다.`;
+      detail = `측면 위협 ${homeThreat}회와 공격권 상실 ${homeTurnovers}회를 함께 반영했습니다.`;
       break;
     case "WINGER_TRACK":
       rawScore = 78 - awayThreat * 11 - awayShots * 7;

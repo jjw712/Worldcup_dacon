@@ -1,6 +1,7 @@
 import { FORMATION_433, TEAMS } from "../data";
 import { GROUP_A_EXPECTED_XI_2026 } from "../rosters2026";
 import { DEFAULT_TACTIC_LOADOUT, tacticPresetById } from "../tactics";
+import { canExchangePlayers } from "../playerRules";
 import type {
   CampaignState,
   CarryPlayerState,
@@ -28,6 +29,33 @@ import {
 
 const OBSERVATION_SECONDS = 60;
 
+const isReplaceableHomePlayer = (player: MatchPlayer) =>
+  player.side === "home" && (player.onField || player.injured);
+
+const resolveHomeSubstitution = (
+  state: MatchState,
+  outgoingPlayerId: string,
+  incomingPlayerId: string,
+): { outgoing: MatchPlayer; incoming: RosterPlayer } | undefined => {
+  const outgoing = state.players.find(
+    (player) =>
+      player.id === outgoingPlayerId && isReplaceableHomePlayer(player),
+  );
+  const incoming = state.homeTeam.roster.find(
+    (player) => player.id === incomingPlayerId,
+  );
+  if (
+    !outgoing ||
+    !incoming ||
+    !canExchangePlayers(outgoing, incoming) ||
+    state.players.some((player) => player.id === incoming.id) ||
+    (state.substitutedOutPlayerIds ?? []).includes(incoming.id)
+  ) {
+    return undefined;
+  }
+  return { outgoing, incoming };
+};
+
 const PHASE_RANGES: Partial<
   Record<MatchPhase, { start: number; end: number; next: MatchPhase }>
 > = {
@@ -48,6 +76,8 @@ const emptyMetrics = (): MatchMetrics => ({
   awayTurnovers: 0,
   homeRightThreat: 0,
   awayRightThreat: 0,
+  homeLeftThreat: 0,
+  awayLeftThreat: 0,
   tacticalWins: 0,
   homeShotsOnTarget: 0,
   awayShotsOnTarget: 0,
@@ -336,6 +366,7 @@ export function createMatch(
     ),
     awayTactic: { ...awayTeam.defaultTactic },
     events: [kickoff],
+    eventSequence: 1,
     feedback: [
       {
         id: `${definition.id}-initial`,
@@ -353,6 +384,7 @@ export function createMatch(
     halfTimeAp: 10,
     substitutionsUsed: 0,
     substitutedOutPlayerIds: [],
+    substitutedOutPlayerStates: [],
     pendingSubstitutions: [],
     tacticLoadout: { ...DEFAULT_TACTIC_LOADOUT },
   };
@@ -491,20 +523,13 @@ export function substitutePreMatchPlayer(
   carry?: CarryPlayerState,
 ): MatchState {
   if (state.phase !== "PRE_MATCH") return state;
-  const outgoing = state.players.find(
-    (player) =>
-      player.id === outgoingPlayerId && player.side === "home" && player.onField,
+  const substitution = resolveHomeSubstitution(
+    state,
+    outgoingPlayerId,
+    incomingPlayerId,
   );
-  const incoming = state.homeTeam.roster.find(
-    (player) => player.id === incomingPlayerId,
-  );
-  if (
-    !outgoing ||
-    !incoming ||
-    state.players.some((player) => player.id === incoming.id)
-  ) {
-    return state;
-  }
+  if (!substitution) return state;
+  const { outgoing, incoming } = substitution;
 
   const replacement = createHomeReplacement(incoming, outgoing, carry);
 
@@ -527,21 +552,13 @@ export function substituteHalfTimePlayer(
   carry?: CarryPlayerState,
 ): MatchState {
   if (state.phase !== "HALF_TIME" || state.substitutionsUsed >= 5) return state;
-  const outgoing = state.players.find(
-    (player) =>
-      player.id === outgoingPlayerId && player.side === "home" && player.onField,
+  const substitution = resolveHomeSubstitution(
+    state,
+    outgoingPlayerId,
+    incomingPlayerId,
   );
-  const incoming = state.homeTeam.roster.find(
-    (player) => player.id === incomingPlayerId,
-  );
-  if (
-    !outgoing ||
-    !incoming ||
-    state.players.some((player) => player.id === incoming.id) ||
-    state.substitutedOutPlayerIds.includes(incoming.id)
-  ) {
-    return state;
-  }
+  if (!substitution) return state;
+  const { outgoing, incoming } = substitution;
 
   const replacement = createHomeReplacement(incoming, outgoing, carry);
   const substitutionNumber = state.substitutionsUsed + 1;
@@ -559,6 +576,10 @@ export function substituteHalfTimePlayer(
     substitutedOutPlayerIds: [
       ...state.substitutedOutPlayerIds,
       outgoing.id,
+    ],
+    substitutedOutPlayerStates: [
+      ...(state.substitutedOutPlayerStates ?? []),
+      outgoing,
     ],
     events: [
       {
@@ -607,21 +628,13 @@ const completeHomeSubstitution = (
   const substitutionsUsed = state.substitutionsUsed ?? 0;
   const substitutedOutPlayerIds = state.substitutedOutPlayerIds ?? [];
   if (substitutionsUsed >= 5) return state;
-  const outgoing = state.players.find(
-    (player) =>
-      player.id === outgoingPlayerId && player.side === "home" && player.onField,
+  const substitution = resolveHomeSubstitution(
+    state,
+    outgoingPlayerId,
+    incomingPlayerId,
   );
-  const incoming = state.homeTeam.roster.find(
-    (player) => player.id === incomingPlayerId,
-  );
-  if (
-    !outgoing ||
-    !incoming ||
-    state.players.some((player) => player.id === incoming.id) ||
-    substitutedOutPlayerIds.includes(incoming.id)
-  ) {
-    return state;
-  }
+  if (!substitution) return state;
+  const { outgoing, incoming } = substitution;
 
   const replacement = createHomeReplacement(incoming, outgoing, carry);
   const substitutionNumber = substitutionsUsed + 1;
@@ -640,6 +653,10 @@ const completeHomeSubstitution = (
     substitutedOutPlayerIds: [
       ...substitutedOutPlayerIds,
       outgoing.id,
+    ],
+    substitutedOutPlayerStates: [
+      ...(state.substitutedOutPlayerStates ?? []),
+      outgoing,
     ],
     events: [
       {
@@ -694,12 +711,10 @@ export function queueSubstitution(
   ) {
     return state;
   }
-  const outgoing = state.players.find(
-    (player) =>
-      player.id === outgoingPlayerId && player.side === "home" && player.onField,
-  );
-  const incoming = state.homeTeam.roster.find(
-    (player) => player.id === incomingPlayerId,
+  const substitution = resolveHomeSubstitution(
+    state,
+    outgoingPlayerId,
+    incomingPlayerId,
   );
   const alreadyReserved = pendingSubstitutions.some(
     (item) =>
@@ -707,14 +722,12 @@ export function queueSubstitution(
       item.incomingPlayerId === incomingPlayerId,
   );
   if (
-    !outgoing ||
-    !incoming ||
-    alreadyReserved ||
-    state.players.some((player) => player.id === incoming.id) ||
-    (state.substitutedOutPlayerIds ?? []).includes(incoming.id)
+    !substitution ||
+    alreadyReserved
   ) {
     return state;
   }
+  const { outgoing, incoming } = substitution;
 
   const pending: PendingSubstitution = {
     id: `${outgoing.id}-${incoming.id}`,
@@ -753,6 +766,7 @@ export function applyPendingSubstitutions(
   const applicable = (state.pendingSubstitutions ?? []).filter(
     (pending) => !pending.targetPhase || pending.targetPhase === state.phase,
   );
+  const resolvedIds = new Set(applicable.map((pending) => pending.id));
   for (const pending of applicable) {
     next = completeHomeSubstitution(
       next,
@@ -762,11 +776,10 @@ export function applyPendingSubstitutions(
       "예약 교체 적용",
     );
   }
-  const appliedIds = new Set(applicable.map((pending) => pending.id));
   return {
     ...next,
     pendingSubstitutions: (state.pendingSubstitutions ?? []).filter(
-      (pending) => !appliedIds.has(pending.id),
+      (pending) => !resolvedIds.has(pending.id),
     ),
   };
 }
@@ -828,11 +841,17 @@ const teamName = (state: MatchState, side: Side): string =>
 const randomAttacker = (
   players: MatchPlayer[],
   state: number,
-): { player: MatchPlayer; state: number } => {
+): { player?: MatchPlayer; state: number } => {
   const candidates = players.filter((player) => player.position !== "GK");
   const result = nextRandom(state);
-  const player =
-    candidates[Math.min(candidates.length - 1, Math.floor(result.value * candidates.length))];
+  const player = candidates.length
+    ? candidates[
+        Math.min(
+          candidates.length - 1,
+          Math.floor(result.value * candidates.length),
+        )
+      ]
+    : players[0];
   return { player, state: result.state };
 };
 
@@ -857,7 +876,15 @@ const closestOutfieldPlayer = (
     )[0];
 
 function prependEvent(state: MatchState, event: MatchEvent): MatchState {
-  return { ...state, events: [event, ...state.events].slice(0, 28) };
+  const eventSequence = state.eventSequence ?? state.events.length;
+  return {
+    ...state,
+    eventSequence: eventSequence + 1,
+    events: [
+      { ...event, id: `${state.id}-event-${eventSequence}` },
+      ...state.events,
+    ].slice(0, 28),
+  };
 }
 
 function resolveEvent(state: MatchState): MatchState {
@@ -874,6 +901,47 @@ function resolveEvent(state: MatchState): MatchState {
   const defendTactic = tacticFor(next, defendingSide);
   const minute = Math.max(1, Math.round(next.gameMinute));
 
+  const injuryRoll = nextRandom(randomState);
+  randomState = injuryRoll.state;
+  const injuryCandidates = activePlayers(next, attackingSide).filter(
+    (player) => player.position !== "GK" && player.injuryRisk > 0.025,
+  );
+  const injuryPick = randomAttacker(injuryCandidates, randomState);
+  randomState = injuryPick.state;
+  const injuredPlayer = injuryPick.player;
+  if (
+    injuredPlayer &&
+    injuryRoll.value < Math.min(0.012, injuredPlayer.injuryRisk * 0.018)
+  ) {
+    next.players = next.players.map((player) =>
+      player.id === injuredPlayer.id
+        ? { ...player, injured: true, onField: false }
+        : player,
+    );
+    if (next.ball.ownerPlayerId === injuredPlayer.id) {
+      next.possession = defendingSide;
+      next.ball = {
+        ...next.ball,
+        ownerSide: defendingSide,
+        ownerPlayerId: closestOutfieldPlayer(
+          next.players,
+          defendingSide,
+          1 - next.ball.x,
+          next.ball.y,
+        )?.id,
+      };
+    }
+    next = prependEvent(next, {
+      id: "injury",
+      minute,
+      type: "INJURY",
+      side: attackingSide,
+      text: `${injuredPlayer.name}이 부상으로 더 이상 경기를 이어갈 수 없습니다.`,
+      emphasis: "danger",
+    });
+    return { ...next, randomState, eventCooldown: 2.2 };
+  }
+
   const foulRoll = nextRandom(randomState);
   randomState = foulRoll.state;
   const foulChance =
@@ -888,6 +956,9 @@ function resolveEvent(state: MatchState): MatchState {
     const offenderPick = randomAttacker(defenders, randomState);
     randomState = offenderPick.state;
     const offender = offenderPick.player;
+    if (!offender) {
+      return { ...next, randomState, eventCooldown: 1.2 };
+    }
     if (defendingSide === "home") {
       next.metrics.homeFouls = (next.metrics.homeFouls ?? 0) + 1;
     } else {
@@ -939,12 +1010,20 @@ function resolveEvent(state: MatchState): MatchState {
 
   const passQuality = teamQuality(next, attackingSide, "passing");
   const defenseQuality = teamQuality(next, defendingSide, "defending");
+  const passingStyle = attackTactic.passingStyle ?? "balanced";
+  const compactPossessionBonus =
+    attackingSide === "home" &&
+    next.commands.some((command) => command.kind === "COMPACT_POSSESSION")
+      ? 0.045
+      : 0;
   const passChance = clamp(
     0.57 +
       (passQuality - defenseQuality) / 180 +
       attackTactic.tempo / 600 -
       defendTactic.pressing / 760 +
-      (attackTactic.preparedPlanActive ? 0.05 : 0),
+      (attackTactic.preparedPlanActive ? 0.05 : 0) +
+      (passingStyle === "short" ? 0.07 : passingStyle === "long" ? -0.08 : 0) +
+      compactPossessionBonus,
     0.34,
     0.88,
   );
@@ -996,8 +1075,18 @@ function resolveEvent(state: MatchState): MatchState {
       ? 0.26
       : attackTactic.attackSide === "right"
         ? 0.74
-        : 0.35 + sideRoll.value * 0.3;
-  const newZone = Math.min(3, next.ball.zone + 1);
+        : attackTactic.attackSide === "both"
+          ? sideRoll.value < 0.5
+            ? 0.24
+            : 0.76
+          : 0.35 + sideRoll.value * 0.3;
+  const zoneAdvance =
+    passingStyle === "long"
+      ? 2
+      : passingStyle === "short" && sideRoll.value > 0.72
+        ? 0
+        : 1;
+  const newZone = Math.min(3, next.ball.zone + zoneAdvance);
   const normalizedX = [0.18, 0.38, 0.64, 0.83][newZone];
   const ballX = attackingSide === "home" ? normalizedX : 1 - normalizedX;
   const receiver = closestOutfieldPlayer(next.players, attackingSide, ballX, y);
@@ -1016,17 +1105,31 @@ function resolveEvent(state: MatchState): MatchState {
     next.metrics.homeRightThreat += 1;
   }
   if (
+    attackingSide === "home" &&
+    (attackTactic.attackSide === "left" || y < 0.38)
+  ) {
+    next.metrics.homeLeftThreat += 1;
+  }
+  if (
     attackingSide === "away" &&
     (attackTactic.attackSide === "right" || y > 0.62)
   ) {
     next.metrics.awayRightThreat += 1;
+  }
+  if (
+    attackingSide === "away" &&
+    (attackTactic.attackSide === "left" || y < 0.38)
+  ) {
+    next.metrics.awayLeftThreat += 1;
   }
 
   const shotRoll = nextRandom(randomState);
   randomState = shotRoll.state;
   const shotChance =
     newZone >= 3
-      ? 0.46 + attackTactic.tempo / 500
+      ? 0.46 +
+        attackTactic.tempo / 500 +
+        (passingStyle === "long" ? 0.04 : passingStyle === "short" ? -0.03 : 0)
       : newZone === 2
         ? 0.11
         : 0;
@@ -1036,6 +1139,9 @@ function resolveEvent(state: MatchState): MatchState {
     const shooterPick = randomAttacker(attackers, randomState);
     randomState = shooterPick.state;
     const shooter = shooterPick.player;
+    if (!shooter) {
+      return { ...next, randomState, eventCooldown: 1.2 };
+    }
     if (attackingSide === "home") next.metrics.homeShots += 1;
     else next.metrics.awayShots += 1;
 
@@ -1082,7 +1188,7 @@ function resolveEvent(state: MatchState): MatchState {
         type: "GOAL",
         side: attackingSide,
         text: `골! ${teamName(next, attackingSide)}의 ${shooter.name}가 마무리합니다.`,
-        emphasis: "danger",
+        emphasis: attackingSide === "home" ? "important" : "danger",
       });
       next.possession = defendingSide;
       next.ball = {
@@ -1098,7 +1204,8 @@ function resolveEvent(state: MatchState): MatchState {
         zone: 0,
       };
     } else {
-      if (goalRoll.value > 0.82) {
+      const wonCorner = goalRoll.value > 0.82;
+      if (wonCorner) {
         if (attackingSide === "home") {
           next.metrics.homeCorners = (next.metrics.homeCorners ?? 0) + 1;
         } else {
@@ -1113,18 +1220,25 @@ function resolveEvent(state: MatchState): MatchState {
           emphasis: "important",
         });
       }
-      next.possession = defendingSide;
+      const restartSide = wonCorner ? attackingSide : defendingSide;
+      const restartX = wonCorner
+        ? attackingSide === "home"
+          ? 0.88
+          : 0.12
+        : 0.5;
+      const restartY = wonCorner ? (y < 0.5 ? 0.08 : 0.92) : 0.5;
+      next.possession = restartSide;
       next.ball = {
-        x: 0.5,
-        y: 0.5,
-        ownerSide: defendingSide,
+        x: restartX,
+        y: restartY,
+        ownerSide: restartSide,
         ownerPlayerId: closestOutfieldPlayer(
           next.players,
-          defendingSide,
-          0.5,
-          0.5,
+          restartSide,
+          restartX,
+          restartY,
         )?.id,
-        zone: 0,
+        zone: wonCorner ? 3 : 0,
       };
     }
   } else {
@@ -1478,6 +1592,7 @@ export function continueMatch(
 }
 
 export function applyHalfTimeRecovery(state: MatchState): MatchState {
+  if (state.phase !== "HALF_TIME") return state;
   const definition = COMMANDS.HALFTIME_RECOVERY;
   const command = {
     id: `command-${state.commands.length + 1}-${Math.round(state.gameMinute)}`,
@@ -1540,6 +1655,56 @@ export function moveHomePlayer(
   };
 }
 
+export function swapHomePlayerPositions(
+  state: MatchState,
+  firstPlayerId: string,
+  secondPlayerId: string,
+  firstOriginX: number,
+  firstOriginY: number,
+): MatchState {
+  if (state.phase !== "PRE_MATCH" && state.phase !== "HALF_TIME") return state;
+  if (firstPlayerId === secondPlayerId) return state;
+  const first = state.players.find(
+    (player) =>
+      player.id === firstPlayerId && player.side === "home" && player.onField,
+  );
+  const second = state.players.find(
+    (player) =>
+      player.id === secondPlayerId && player.side === "home" && player.onField,
+  );
+  if (!first || !second || !canExchangePlayers(first, second)) return state;
+
+  const firstDestination = {
+    x: clamp(second.x, 0.04, 0.82),
+    y: clamp(second.y, 0.06, 0.94),
+  };
+  const secondDestination = {
+    x: clamp(firstOriginX, 0.04, 0.82),
+    y: clamp(firstOriginY, 0.06, 0.94),
+  };
+  return {
+    ...state,
+    players: state.players.map((player) => {
+      const destination =
+        player.id === first.id
+          ? firstDestination
+          : player.id === second.id
+            ? secondDestination
+            : undefined;
+      return destination
+        ? {
+            ...player,
+            ...destination,
+            baseX: destination.x,
+            baseY: destination.y,
+            targetX: destination.x,
+            targetY: destination.y,
+          }
+        : player;
+    }),
+  };
+}
+
 export function createMatchResult(state: MatchState): MatchResult {
   const pointsEarned =
     state.score.home > state.score.away
@@ -1559,7 +1724,10 @@ export function createMatchResult(state: MatchState): MatchResult {
       evaluateCommandImpact(state, command),
     ),
     metrics: state.metrics,
-    playerStates: state.players,
+    playerStates: [
+      ...state.players,
+      ...(state.substitutedOutPlayerStates ?? []),
+    ],
   };
 }
 

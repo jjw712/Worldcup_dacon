@@ -9,6 +9,7 @@ import {
   configureTacticLoadout,
   continueMatch,
   createMatch,
+  createMatchResult,
   moveHomePlayer,
   queueSubstitution,
   skipObservationSegment,
@@ -16,6 +17,7 @@ import {
   substituteHalfTimePlayer,
   substitutePausedPlayer,
   substitutePreMatchPlayer,
+  swapHomePlayerPositions,
   switchToSubTactic,
 } from "./matchEngine";
 
@@ -54,10 +56,12 @@ describe("match engine", () => {
     const active = startMatch(
       createMatch(MATCH_DEFINITIONS[0], createNewCampaign(111_222)),
     );
-    const outgoing = active.players.find((player) => player.side === "home")!;
+    const outgoing = active.players.find(
+      (player) => player.side === "home" && player.position !== "GK",
+    )!;
     const startingIds = new Set(active.players.map((player) => player.id));
     const incoming = active.homeTeam.roster.find(
-      (player) => !startingIds.has(player.id),
+      (player) => !startingIds.has(player.id) && player.position !== "GK",
     )!;
 
     const substituted = substitutePausedPlayer(active, outgoing.id, incoming.id);
@@ -65,16 +69,57 @@ describe("match engine", () => {
     expect(substituted.substitutionsUsed).toBe(1);
     expect(substituted.players.some((player) => player.id === outgoing.id)).toBe(false);
     expect(substituted.players.some((player) => player.id === incoming.id)).toBe(true);
+    expect(substituted.substitutedOutPlayerStates).toContainEqual(outgoing);
+    expect(
+      createMatchResult(substituted).playerStates.some(
+        (player) => player.id === outgoing.id,
+      ),
+    ).toBe(true);
+  });
+
+  it("allows an injured player who has left the field to be replaced", () => {
+    const active = startMatch(
+      createMatch(MATCH_DEFINITIONS[0], createNewCampaign(111_223)),
+    );
+    const outgoing = active.players.find(
+      (player) => player.side === "home" && player.position !== "GK",
+    )!;
+    const startingIds = new Set(active.players.map((player) => player.id));
+    const incoming = active.homeTeam.roster.find(
+      (player) => !startingIds.has(player.id) && player.position !== "GK",
+    )!;
+    const injured = {
+      ...active,
+      players: active.players.map((player) =>
+        player.id === outgoing.id
+          ? { ...player, injured: true, onField: false }
+          : player,
+      ),
+    };
+
+    const substituted = substitutePausedPlayer(
+      injured,
+      outgoing.id,
+      incoming.id,
+    );
+
+    expect(substituted.substitutionsUsed).toBe(1);
+    expect(substituted.players.some((player) => player.id === incoming.id)).toBe(
+      true,
+    );
+    expect(substituted.substitutedOutPlayerIds).toContain(outgoing.id);
   });
 
   it("queues a hydration substitution, allows cancellation and applies it on resume", () => {
     const hydration = skipObservationSegment(
       startMatch(createMatch(MATCH_DEFINITIONS[0], createNewCampaign(222_333))),
     );
-    const outgoing = hydration.players.find((player) => player.side === "home")!;
+    const outgoing = hydration.players.find(
+      (player) => player.side === "home" && player.position !== "GK",
+    )!;
     const startingIds = new Set(hydration.players.map((player) => player.id));
     const incoming = hydration.homeTeam.roster.find(
-      (player) => !startingIds.has(player.id),
+      (player) => !startingIds.has(player.id) && player.position !== "GK",
     )!;
     const queued = queueSubstitution(hydration, outgoing.id, incoming.id);
 
@@ -93,14 +138,43 @@ describe("match engine", () => {
     expect(resumed.events[1].text).toContain("예약 교체 적용");
   });
 
+  it("clears a queued substitution that becomes invalid before resuming", () => {
+    const hydration = skipObservationSegment(
+      startMatch(createMatch(MATCH_DEFINITIONS[0], createNewCampaign(222_334))),
+    );
+    const outgoing = hydration.players.find(
+      (player) => player.side === "home" && player.position !== "GK",
+    )!;
+    const startingIds = new Set(hydration.players.map((player) => player.id));
+    const incoming = hydration.homeTeam.roster.find(
+      (player) => !startingIds.has(player.id) && player.position !== "GK",
+    )!;
+    const queued = queueSubstitution(hydration, outgoing.id, incoming.id);
+    const invalidated = {
+      ...queued,
+      players: queued.players.map((player) =>
+        player.id === outgoing.id
+          ? { ...player, onField: false, injured: false }
+          : player,
+      ),
+    };
+
+    const resumed = continueMatch(invalidated);
+
+    expect(resumed.pendingSubstitutions).toHaveLength(0);
+    expect(resumed.substitutionsUsed).toBe(0);
+  });
+
   it("reserves a paused substitution for the selected future break", () => {
     const active = startMatch(
       createMatch(MATCH_DEFINITIONS[0], createNewCampaign(333_444)),
     );
-    const outgoing = active.players.find((player) => player.side === "home")!;
+    const outgoing = active.players.find(
+      (player) => player.side === "home" && player.position !== "GK",
+    )!;
     const startingIds = new Set(active.players.map((player) => player.id));
     const incoming = active.homeTeam.roster.find(
-      (player) => !startingIds.has(player.id),
+      (player) => !startingIds.has(player.id) && player.position !== "GK",
     )!;
     const queued = queueSubstitution(
       active,
@@ -135,15 +209,113 @@ describe("match engine", () => {
     });
   });
 
+  it("swaps two home-player positions when one is dropped on the other", () => {
+    const match = createMatch(
+      MATCH_DEFINITIONS[0],
+      createNewCampaign(555_111),
+    );
+    const [first, second] = match.players.filter(
+      (player) => player.side === "home" && player.position !== "GK",
+    );
+    const swapped = swapHomePlayerPositions(
+      moveHomePlayer(match, first.id, second.x, second.y),
+      first.id,
+      second.id,
+      first.x,
+      first.y,
+    );
+
+    expect(swapped.players.find((player) => player.id === first.id)).toMatchObject({
+      x: second.x,
+      y: second.y,
+    });
+    expect(swapped.players.find((player) => player.id === second.id)).toMatchObject({
+      x: first.x,
+      y: first.y,
+    });
+  });
+
+  it("does not swap a goalkeeper with an outfield player", () => {
+    const match = createMatch(
+      MATCH_DEFINITIONS[0],
+      createNewCampaign(555_112),
+    );
+    const goalkeeper = match.players.find(
+      (player) => player.side === "home" && player.position === "GK",
+    )!;
+    const outfieldPlayer = match.players.find(
+      (player) => player.side === "home" && player.position !== "GK",
+    )!;
+    const positioned = moveHomePlayer(
+      match,
+      goalkeeper.id,
+      outfieldPlayer.x,
+      outfieldPlayer.y,
+    );
+
+    expect(
+      swapHomePlayerPositions(
+        positioned,
+        goalkeeper.id,
+        outfieldPlayer.id,
+        goalkeeper.x,
+        goalkeeper.y,
+      ),
+    ).toBe(positioned);
+  });
+
+  it("rejects goalkeeper and outfield-player substitutions", () => {
+    const initial = createMatch(
+      MATCH_DEFINITIONS[0],
+      createNewCampaign(123_457),
+    );
+    const goalkeeper = initial.players.find(
+      (player) => player.side === "home" && player.position === "GK",
+    )!;
+    const startingIds = new Set(initial.players.map((player) => player.id));
+    const outfieldBenchPlayer = initial.homeTeam.roster.find(
+      (player) => !startingIds.has(player.id) && player.position !== "GK",
+    )!;
+
+    expect(
+      substitutePreMatchPlayer(
+        initial,
+        goalkeeper.id,
+        outfieldBenchPlayer.id,
+      ),
+    ).toBe(initial);
+
+    const active = startMatch(initial);
+    expect(
+      substitutePausedPlayer(active, goalkeeper.id, outfieldBenchPlayer.id),
+    ).toBe(active);
+
+    const hydration = skipObservationSegment(active);
+    expect(
+      queueSubstitution(hydration, goalkeeper.id, outfieldBenchPlayer.id),
+    ).toBe(hydration);
+
+    const halftime = skipObservationSegment(continueMatch(hydration));
+    expect(
+      substituteHalfTimePlayer(
+        halftime,
+        goalkeeper.id,
+        outfieldBenchPlayer.id,
+      ),
+    ).toBe(halftime);
+  });
+
   it("replaces a pre-match starter with a bench player in the same tactical slot", () => {
     const initial = createMatch(
       MATCH_DEFINITIONS[0],
       createNewCampaign(123_456),
     );
-    const outgoing = initial.players.find((player) => player.side === "home")!;
+    const outgoing = initial.players.find(
+      (player) => player.side === "home" && player.position !== "GK",
+    )!;
     const startingIds = new Set(initial.players.map((player) => player.id));
     const incoming = initial.homeTeam.roster.find(
-      (player) => !startingIds.has(player.id),
+      (player) => !startingIds.has(player.id) && player.position !== "GK",
     )!;
     const substituted = substitutePreMatchPlayer(
       initial,
@@ -168,10 +340,12 @@ describe("match engine", () => {
       ),
     );
     expect(halftime.phase).toBe("HALF_TIME");
-    const outgoing = halftime.players.find((player) => player.side === "home")!;
+    const outgoing = halftime.players.find(
+      (player) => player.side === "home" && player.position !== "GK",
+    )!;
     const startingIds = new Set(halftime.players.map((player) => player.id));
     const incoming = halftime.homeTeam.roster.find(
-      (player) => !startingIds.has(player.id),
+      (player) => !startingIds.has(player.id) && player.position !== "GK",
     )!;
 
     halftime = substituteHalfTimePlayer(halftime, outgoing.id, incoming.id);
@@ -206,6 +380,26 @@ describe("match engine", () => {
     expect(
       match.players.every((player) => player.currentStamina >= 0),
     ).toBe(true);
+  });
+
+  it("records possession and separates total shots from shots on target", () => {
+    const match = runSeconds(60);
+    expect(
+      (match.metrics.homePossessionSeconds ?? 0) +
+        (match.metrics.awayPossessionSeconds ?? 0),
+    ).toBeGreaterThan(0);
+    expect(match.metrics.homeShotsOnTarget ?? 0).toBeLessThanOrEqual(
+      match.metrics.homeShots,
+    );
+    expect(match.metrics.awayShotsOnTarget ?? 0).toBeLessThanOrEqual(
+      match.metrics.awayShots,
+    );
+  });
+
+  it("keeps generated event identifiers unique after the feed reaches its cap", () => {
+    const match = runSeconds(60);
+    const ids = match.events.map((event) => event.id);
+    expect(new Set(ids).size).toBe(ids.length);
   });
 
   it("moves players into distinct support and pressing runs", () => {
@@ -274,5 +468,13 @@ describe("match engine", () => {
       true,
     );
     expect(recovered.commands.at(-1)?.kind).toBe("HALFTIME_RECOVERY");
+  });
+
+  it("does not apply halftime recovery outside halftime", () => {
+    const active = startMatch(
+      createMatch(MATCH_DEFINITIONS[0], createNewCampaign()),
+    );
+
+    expect(applyHalfTimeRecovery(active)).toBe(active);
   });
 });

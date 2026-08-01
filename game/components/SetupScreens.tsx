@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { MATCH_DEFINITIONS, TEAMS } from "../data";
 import { sortedStandings } from "../engine/campaign";
 import type {
@@ -26,6 +26,16 @@ export function LandingScreen({
   onNewCampaign,
   onContinue,
 }: LandingScreenProps) {
+  const [confirmNewCampaign, setConfirmNewCampaign] = useState(false);
+  useEffect(() => {
+    if (!confirmNewCampaign) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setConfirmNewCampaign(false);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [confirmNewCampaign]);
+
   return (
     <main className="landing-shell">
       <div className="landing-grid" aria-hidden="true" />
@@ -54,7 +64,13 @@ export function LandingScreen({
             존재하지 않습니다.
           </p>
           <div className="hero-actions">
-            <button className="button button-primary" onClick={onNewCampaign}>
+            <button
+              className="button button-primary"
+              onClick={() => {
+                if (hasSavedCampaign) setConfirmNewCampaign(true);
+                else onNewCampaign();
+              }}
+            >
               새 캠페인 시작
               <span aria-hidden="true">→</span>
             </button>
@@ -99,6 +115,41 @@ export function LandingScreen({
           </div>
         </div>
       </section>
+      {confirmNewCampaign && (
+        <div
+          className="new-campaign-backdrop"
+          onPointerDown={() => setConfirmNewCampaign(false)}
+        >
+          <section
+            className="new-campaign-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-label="새 캠페인 시작 확인"
+            onPointerDown={(event) => event.stopPropagation()}
+          >
+            <span>저장 데이터 확인</span>
+            <h2>현재 캠페인을 처음부터 시작할까요?</h2>
+            <p>기존 경기 결과와 선수 상태가 새 캠페인으로 교체됩니다.</p>
+            <div>
+              <button
+                type="button"
+                className="button button-ghost"
+                autoFocus
+                onClick={() => setConfirmNewCampaign(false)}
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                className="button button-primary"
+                onClick={onNewCampaign}
+              >
+                새 캠페인 시작
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
     </main>
   );
 }
@@ -246,6 +297,12 @@ interface PreMatchScreenProps {
   selectedPlayerId?: string;
   onSelectPlayer: (playerId: string) => void;
   onMovePlayer: (playerId: string, x: number, y: number) => void;
+  onSwapPlayers: (
+    firstPlayerId: string,
+    secondPlayerId: string,
+    firstOriginX: number,
+    firstOriginY: number,
+  ) => void;
   onSubstitute: (outgoingPlayerId: string, incomingPlayerId: string) => void;
   onConfigureTactic: (
     slot: keyof TacticLoadout,
@@ -260,6 +317,7 @@ export function PreMatchScreen({
   selectedPlayerId,
   onSelectPlayer,
   onMovePlayer,
+  onSwapPlayers,
   onSubstitute,
   onConfigureTactic,
   onStart,
@@ -355,10 +413,11 @@ export function PreMatchScreen({
             focusSide={viewSide}
             onSelectPlayer={selectViewedPlayer}
             onMovePlayer={onMovePlayer}
+            onSwapPlayers={viewSide === "home" ? onSwapPlayers : undefined}
           />
           <p className="board-edit-note">
             {viewSide === "home"
-              ? "선수를 드래그해 위치를 조정할 수 있습니다."
+              ? "빈 공간에 놓으면 위치가 바뀌고, 다른 선수 위에 놓으면 두 선수의 위치가 교환됩니다."
               : "상대 전술은 스카우팅 예상치이며 열람만 가능합니다."}
           </p>
         </section>

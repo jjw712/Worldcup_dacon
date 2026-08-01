@@ -18,7 +18,7 @@ export type DetailedPosition =
   | "SS"
   | "ST";
 export type PreferredFoot = "LEFT" | "RIGHT" | "BOTH" | "UNKNOWN";
-export type AttackSide = "left" | "center" | "right";
+export type AttackSide = "left" | "center" | "right" | "both";
 export type TacticPresetId =
   | "BALANCED_433"
   | "CONTROL_4231"
@@ -45,6 +45,9 @@ export type CommandKind =
   | "PRESS_HIGHER"
   | "LOWER_LINE"
   | "ATTACK_WIDE"
+  | "COMPACT_POSSESSION"
+  | "LONG_BALL"
+  | "SHORT_PASSING"
   | "WINGER_TRACK"
   | "CENTRAL_RUN"
   | "CONSERVE_ENERGY"
@@ -188,6 +191,7 @@ export interface TacticState {
   tempo: number;
   width: number;
   attackSide: AttackSide;
+  passingStyle?: "balanced" | "short" | "long";
   preparedPlan: string;
   preparedPlanActive: boolean;
 }
@@ -273,6 +277,8 @@ export interface MatchMetrics {
   awayTurnovers: number;
   homeRightThreat: number;
   awayRightThreat: number;
+  homeLeftThreat: number;
+  awayLeftThreat: number;
   tacticalWins: number;
   homeShotsOnTarget?: number;
   awayShotsOnTarget?: number;
@@ -347,6 +353,7 @@ export interface MatchState {
   homeTactic: TacticState;
   awayTactic: TacticState;
   events: MatchEvent[];
+  eventSequence: number;
   feedback: CoachFeedback[];
   metrics: MatchMetrics;
   commands: AppliedCommand[];
@@ -356,6 +363,7 @@ export interface MatchState {
   halfTimeAp: number;
   substitutionsUsed: number;
   substitutedOutPlayerIds: string[];
+  substitutedOutPlayerStates: MatchPlayer[];
   pendingSubstitutions: PendingSubstitution[];
   tacticLoadout: TacticLoadout;
 }
@@ -405,6 +413,7 @@ export interface CommandDefinition {
   maxCost: number;
   needsPlayer: boolean;
   targetPositions?: Position[];
+  targetDetailedPositions?: DetailedPosition[];
   effect: string;
   tradeoff: string;
 }

@@ -1,6 +1,6 @@
 import type { MatchMetrics } from "../types";
 
-const possession = (metrics: MatchMetrics): [number, number] => {
+export const possessionPercent = (metrics: MatchMetrics): [number, number] => {
   const homeSeconds = metrics.homePossessionSeconds ?? 0;
   const awaySeconds = metrics.awayPossessionSeconds ?? 0;
   const totalSeconds = homeSeconds + awaySeconds;
@@ -26,14 +26,21 @@ export function MatchStatsTable({
   awayLabel: string;
   compact?: boolean;
 }) {
-  const [homePossession, awayPossession] = possession(metrics);
+  const [homePossession, awayPossession] = possessionPercent(metrics);
+  const homeOnTarget = metrics.homeShotsOnTarget ?? 0;
+  const awayOnTarget = metrics.awayShotsOnTarget ?? 0;
   const rows = [
     ["점유율", `${homePossession}%`, `${awayPossession}%`],
-    ["슈팅", metrics.homeShots, metrics.awayShots],
+    ["전체 슈팅", metrics.homeShots, metrics.awayShots],
     [
       "유효 슈팅",
-      metrics.homeShotsOnTarget ?? 0,
-      metrics.awayShotsOnTarget ?? 0,
+      homeOnTarget,
+      awayOnTarget,
+    ],
+    [
+      "비유효 슈팅",
+      Math.max(0, metrics.homeShots - homeOnTarget),
+      Math.max(0, metrics.awayShots - awayOnTarget),
     ],
     ["경고", metrics.homeCards ?? 0, metrics.awayCards ?? 0],
     ["파울", metrics.homeFouls ?? 0, metrics.awayFouls ?? 0],
