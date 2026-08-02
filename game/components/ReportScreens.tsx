@@ -12,7 +12,9 @@ interface ReportScreenProps {
   onTitle: () => void;
 }
 
-const decisionGrade = (result: MatchResult): string => {
+export type DecisionGrade = "A" | "B+" | "B" | "C";
+
+const decisionGrade = (result: MatchResult): DecisionGrade => {
   const evaluations = result.commandEvaluations ?? [];
   const averageExecution = evaluations.length
     ? evaluations.reduce(
@@ -25,6 +27,38 @@ const decisionGrade = (result: MatchResult): string => {
   if (averageExecution >= 55) return "B";
   return "C";
 };
+
+export function reportHeadline(
+  homeGoals: number,
+  awayGoals: number,
+  grade: DecisionGrade,
+): readonly [string, string] {
+  const strongGrade = grade === "A" || grade === "B+";
+
+  if (homeGoals > awayGoals) {
+    if (strongGrade) return ["탁월한 선택이", "승리를 완성했습니다."];
+    if (grade === "B") {
+      return ["필요한 순간의 판단이", "승리로 이어졌습니다."];
+    }
+    return ["승리를 거뒀지만,", "돌아볼 선택도 남았습니다."];
+  }
+
+  if (homeGoals === awayGoals) {
+    if (strongGrade) return ["좋은 판단으로", "귀중한 승점을 지켜냈습니다."];
+    if (grade === "B") {
+      return ["치열한 승부 끝에", "승점 1점을 가져왔습니다."];
+    }
+    return ["승점은 얻었지만,", "아쉬운 선택이 남았습니다."];
+  }
+
+  if (strongGrade) {
+    return ["결과는 아쉽지만,", "선택의 방향은 분명했습니다."];
+  }
+  if (grade === "B") {
+    return ["패배 속에서도", "다음 경기를 위한 답을 찾았습니다."];
+  }
+  return ["결과와 선택을", "차분히 되짚어볼 시간입니다."];
+}
 
 export function ReportScreen({
   campaign,
@@ -40,6 +74,7 @@ export function ReportScreen({
       )
     : 0;
   const grade = decisionGrade(result);
+  const headline = reportHeadline(result.homeGoals, result.awayGoals, grade);
   const evaluations = result.commandEvaluations ?? [];
   const averageExecution = evaluations.length
     ? Math.round(
@@ -64,9 +99,9 @@ export function ReportScreen({
         <div>
           <p className="eyebrow">FULL TIME · DECISION REPORT</p>
           <h1>
-            당신의 선택이
+            {headline[0]}
             <br />
-            경기의 흐름을 바꿨습니다.
+            {headline[1]}
           </h1>
         </div>
         <div className="final-score">
