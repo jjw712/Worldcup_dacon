@@ -12,6 +12,7 @@ import {
   HalfTimeScreen,
   HydrationScreen,
   ObservationScreen,
+  defaultPositionFilterForCommand,
   toggleHalfTimeSubTactic,
   toggleHalfTimePlayerTarget,
   updateHalfTimeConserveTargets,
@@ -88,6 +89,12 @@ describe("halftime personal targets", () => {
 });
 
 describe("HydrationScreen", () => {
+  it("starts all-position personal commands with the full squad visible", () => {
+    expect(defaultPositionFilterForCommand("CONSERVE_ENERGY")).toBe("ALL");
+    expect(defaultPositionFilterForCommand("CENTRAL_RUN")).toBe("FW");
+    expect(defaultPositionFilterForCommand("WINGER_TRACK")).toBe("ALL");
+  });
+
   it("renders the break without crashing when memo lines repeat", () => {
     const match = skipObservationSegment(
       startMatch(createMatch(MATCH_DEFINITIONS[0], createNewCampaign())),
@@ -107,6 +114,39 @@ describe("HydrationScreen", () => {
     expect(match.phase).toBe("HYDRATION_FIRST");
     expect(html).toContain("행동 선택");
     expect(html).toContain("팀 전체 지시");
+  });
+
+  it("renders restored hydration time and delivered-command state", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-02T12:00:00.000Z"));
+    try {
+      const match = skipObservationSegment(
+        startMatch(createMatch(MATCH_DEFINITIONS[0], createNewCampaign())),
+      );
+      const html = renderToStaticMarkup(
+        <HydrationScreen
+          match={match}
+          memo=""
+          progress={{
+            phase: "HYDRATION_FIRST",
+            countdownStartsAtMs: Date.now() - 10_000,
+            spentCommandSeconds: 12,
+            deliveredKinds: ["PRESS_HIGHER"],
+          }}
+          onApplyCommand={vi.fn()}
+          onQueueSubstitution={vi.fn()}
+          onCancelSubstitution={vi.fn()}
+          onSwitchSubTactic={vi.fn()}
+          onComplete={vi.fn()}
+        />,
+      );
+
+      expect(html).toContain(">138<");
+      expect(html).toContain("압박 강도 높이기");
+      expect(html).toContain("전달 완료");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("renders the paused live-substitution workspace", () => {
@@ -174,6 +214,8 @@ describe("HydrationScreen", () => {
     expect(html).toContain("중앙 밀집 점유");
     expect(html).toContain("롱볼 축구");
     expect(html).toContain("숏패스 위주");
+    expect(html).toContain("별도의 경기력 페널티는 없습니다");
+    expect(html).not.toContain("여러 명을 선택할 수 있으며 대가는 없습니다");
     expect(html.indexOf("팀 사기·결속")).toBeLessThan(
       html.indexOf("팀 전체 지시"),
     );

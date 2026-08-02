@@ -25,7 +25,7 @@ export async function generateMetadata(): Promise<Metadata> {
       description,
       type: "website",
       locale: "ko_KR",
-      images: [{ url: imageUrl, width: 1200, height: 630, alt: "잠.물.마" }],
+      images: [{ url: imageUrl, width: 1731, height: 909, alt: "잠.물.마" }],
     },
     twitter: {
       card: "summary_large_image",

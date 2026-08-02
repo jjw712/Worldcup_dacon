@@ -10,6 +10,10 @@ import {
 import { averageTeamStamina } from "../engine/matchEngine";
 import { calculateBreakRemaining } from "../engine/timer";
 import type {
+  HydrationPhase,
+  HydrationProgress,
+} from "../sessionStorage";
+import type {
   AttackSide,
   CommandKind,
   MatchPlayer,
@@ -854,6 +858,8 @@ export function FullTimeScreen({
 interface HydrationScreenProps {
   match: MatchState;
   memo: string;
+  progress?: HydrationProgress;
+  onProgressChange?: (progress: HydrationProgress) => void;
   onApplyCommand: (
     kind: CommandKind,
     targetPlayerId: string | undefined,
@@ -870,15 +876,34 @@ interface HydrationScreenProps {
   onComplete: () => void;
 }
 
+export function defaultPositionFilterForCommand(
+  kind?: CommandKind,
+): "ALL" | Position {
+  if (!kind) return "ALL";
+  const definition = COMMANDS[kind];
+  if (!definition.needsPlayer || definition.targetDetailedPositions) return "ALL";
+  return definition.targetPositions?.length === 1
+    ? definition.targetPositions[0]
+    : "ALL";
+}
+
 export function HydrationScreen({
   match,
   memo,
+  progress,
+  onProgressChange,
   onApplyCommand,
   onQueueSubstitution,
   onCancelSubstitution,
   onSwitchSubTactic,
   onComplete,
 }: HydrationScreenProps) {
+  const hydrationPhase: HydrationPhase =
+    match.phase === "HYDRATION_SECOND"
+      ? "HYDRATION_SECOND"
+      : "HYDRATION_FIRST";
+  const restoredProgress =
+    progress?.phase === hydrationPhase ? progress : undefined;
   const [selectedPlayerId, setSelectedPlayerId] = useState<string>();
   const [detailPlayerId, setDetailPlayerId] = useState<string>();
   const [selectedCommand, setSelectedCommand] = useState<CommandKind>();
@@ -888,7 +913,9 @@ export function HydrationScreen({
   const [positionFilter, setPositionFilter] = useState<"ALL" | Position>(
     "ALL",
   );
-  const [deliveredKinds, setDeliveredKinds] = useState<CommandKind[]>([]);
+  const [deliveredKinds, setDeliveredKinds] = useState<CommandKind[]>(
+    () => restoredProgress?.deliveredKinds ?? [],
+  );
   const [breakTool, setBreakTool] = useState<
     "commands" | "roster" | "tactics"
   >(
@@ -897,9 +924,13 @@ export function HydrationScreen({
   const [rosterSide, setRosterSide] = useState<"home" | "away">("home");
   const [rosterPlayerId, setRosterPlayerId] = useState<string>();
   const [compareBasePlayerId, setCompareBasePlayerId] = useState<string>();
-  const [spentCommandSeconds, setSpentCommandSeconds] = useState(0);
-  const [now, setNow] = useState(() => performance.now());
-  const [briefingEndsAt] = useState(() => performance.now() + 3000);
+  const [spentCommandSeconds, setSpentCommandSeconds] = useState(
+    () => restoredProgress?.spentCommandSeconds ?? 0,
+  );
+  const [now, setNow] = useState(() => Date.now());
+  const [countdownStartsAtMs] = useState(
+    () => restoredProgress?.countdownStartsAtMs ?? Date.now() + 3000,
+  );
   const [pendingDelivery, setPendingDelivery] = useState<{
     id: string;
     kind: CommandKind;
@@ -912,19 +943,37 @@ export function HydrationScreen({
   const [message, setMessage] = useState(
     "메모와 코치 피드백을 확인하고 중요한 지시부터 선택하십시오.",
   );
-  const [startedAt] = useState(briefingEndsAt);
   const completeOnce = useRef(false);
   const completedDeliveryIds = useRef(new Set<string>());
 
-  const briefingReady = now >= briefingEndsAt;
+  const briefingReady = now >= countdownStartsAtMs;
   const remaining = briefingReady
-    ? calculateBreakRemaining(startedAt, now, spentCommandSeconds)
+    ? calculateBreakRemaining(
+        countdownStartsAtMs,
+        now,
+        spentCommandSeconds,
+      )
     : 180;
 
   useEffect(() => {
-    const timer = window.setInterval(() => setNow(performance.now()), 120);
+    const timer = window.setInterval(() => setNow(Date.now()), 120);
     return () => window.clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    onProgressChange?.({
+      phase: hydrationPhase,
+      countdownStartsAtMs,
+      spentCommandSeconds,
+      deliveredKinds,
+    });
+  }, [
+    countdownStartsAtMs,
+    deliveredKinds,
+    hydrationPhase,
+    onProgressChange,
+    spentCommandSeconds,
+  ]);
 
   useEffect(() => {
     if (
@@ -1302,13 +1351,7 @@ export function HydrationScreen({
                     const next = selectedCommand === kind ? undefined : kind;
                     setSelectedCommand(next);
                     setSelectedPlayerId(undefined);
-                    setPositionFilter(
-                      next && COMMANDS[next].needsPlayer
-                        ? COMMANDS[next].targetDetailedPositions
-                          ? "ALL"
-                          : (COMMANDS[next].targetPositions?.[0] ?? "ALL")
-                        : "ALL",
-                    );
+                    setPositionFilter(defaultPositionFilterForCommand(next));
                     if (next !== "ATTACK_WIDE") setAttackDirection(undefined);
                   }}
                 >
@@ -1764,7 +1807,7 @@ export function HalfTimeScreen({
       id: "conserve",
       category: "individual",
       label: "개인 체력 안배",
-      detail: `${selectedTargetLabel("conserve") ?? "선수"}의 체력 소모를 줄입니다. 여러 명을 선택할 수 있으며 대가는 없습니다.`,
+      detail: `${selectedTargetLabel("conserve") ?? "선수"}의 체력 소모를 줄입니다. 여러 명을 선택할 수 있으며 별도의 경기력 페널티는 없습니다.`,
       cost: 1,
       kind: "CONSERVE_ENERGY",
       needsPlayer: true,

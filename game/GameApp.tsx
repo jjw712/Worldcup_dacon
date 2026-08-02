@@ -38,8 +38,10 @@ import {
   switchToSubTactic,
 } from "./engine/matchEngine";
 import {
+  latestGoalEventId,
   parseSavedSession,
   type AppScreen,
+  type HydrationProgress,
   type SavedSession,
 } from "./sessionStorage";
 import type {
@@ -75,6 +77,8 @@ export function GameApp() {
   const [goalEvent, setGoalEvent] = useState<MatchState["events"][number]>();
   const [acknowledgedBreakPhase, setAcknowledgedBreakPhase] =
     useState<MatchState["phase"] | undefined>(undefined);
+  const [hydrationProgress, setHydrationProgress] =
+    useState<HydrationProgress>();
   const handledFinishedMatch = useRef<string | undefined>(undefined);
   const handledGoalEvent = useRef<string | undefined>(undefined);
   const goalPauseActive = useRef(false);
@@ -108,6 +112,8 @@ export function GameApp() {
         setMemo(parsedSession.memo);
         setPlaybackSpeed(parsedSession.playbackSpeed);
         setAcknowledgedBreakPhase(parsedSession.acknowledgedBreakPhase);
+        setHydrationProgress(parsedSession.hydrationProgress);
+        handledGoalEvent.current = latestGoalEventId(parsedSession.match);
         setIsPaused(
           parsedSession.screen === "match" &&
             Boolean(
@@ -148,6 +154,7 @@ export function GameApp() {
         memo,
         playbackSpeed,
         acknowledgedBreakPhase,
+        hydrationProgress,
       };
       try {
         window.localStorage.setItem(
@@ -163,6 +170,7 @@ export function GameApp() {
     acknowledgedBreakPhase,
     campaign,
     campaignStarted,
+    hydrationProgress,
     lastResult,
     match,
     memo,
@@ -245,6 +253,7 @@ export function GameApp() {
     setIsPaused(false);
     setGoalEvent(undefined);
     setAcknowledgedBreakPhase(undefined);
+    setHydrationProgress(undefined);
     handledFinishedMatch.current = undefined;
     handledGoalEvent.current = undefined;
     try {
@@ -271,6 +280,7 @@ export function GameApp() {
     setIsPaused(false);
     setGoalEvent(undefined);
     setAcknowledgedBreakPhase(undefined);
+    setHydrationProgress(undefined);
     setSelectedPlayerId(undefined);
     handledFinishedMatch.current = undefined;
     handledGoalEvent.current = undefined;
@@ -280,6 +290,7 @@ export function GameApp() {
   const beginMatch = () => {
     setMatch((current) => (current ? startMatch(current) : current));
     setIsPaused(false);
+    setHydrationProgress(undefined);
     setScreen("match");
   };
 
@@ -314,6 +325,11 @@ export function GameApp() {
     );
     setIsPaused(false);
   }, [campaign.playerCarry]);
+
+  const completeHydration = useCallback(() => {
+    setHydrationProgress(undefined);
+    resumeMatch();
+  }, [resumeMatch]);
 
   const goAfterReport = () => {
     setScreen(campaign.completed ? "final" : "campaign");
@@ -411,6 +427,8 @@ export function GameApp() {
           key={match.phase}
           match={match}
           memo={memo}
+          progress={hydrationProgress}
+          onProgressChange={setHydrationProgress}
           onApplyCommand={(kind, playerId, cost, randomState, attackSide) =>
             applyTacticalCommand(
               kind,
@@ -437,7 +455,7 @@ export function GameApp() {
               current ? switchToSubTactic(current, slot) : current,
             )
           }
-          onComplete={resumeMatch}
+          onComplete={completeHydration}
         />
       );
     }

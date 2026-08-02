@@ -1,4 +1,9 @@
-import type { CampaignState, MatchResult, MatchState } from "./types";
+import type {
+  CampaignState,
+  CommandKind,
+  MatchResult,
+  MatchState,
+} from "./types";
 
 export type AppScreen =
   | "landing"
@@ -8,6 +13,18 @@ export type AppScreen =
   | "fulltime"
   | "report"
   | "final";
+
+export type HydrationPhase = Extract<
+  MatchState["phase"],
+  "HYDRATION_FIRST" | "HYDRATION_SECOND"
+>;
+
+export interface HydrationProgress {
+  phase: HydrationPhase;
+  countdownStartsAtMs: number;
+  spentCommandSeconds: number;
+  deliveredKinds: CommandKind[];
+}
 
 export interface SavedSession {
   version: 1;
@@ -19,6 +36,7 @@ export interface SavedSession {
   memo: string;
   playbackSpeed: 1 | 2 | 4;
   acknowledgedBreakPhase?: MatchState["phase"];
+  hydrationProgress?: HydrationProgress;
 }
 
 const APP_SCREENS = new Set<AppScreen>([
@@ -32,6 +50,58 @@ const APP_SCREENS = new Set<AppScreen>([
 ]);
 
 const MATCH_SCREENS = new Set<AppScreen>(["prematch", "match", "fulltime"]);
+const HYDRATION_PHASES = new Set<HydrationPhase>([
+  "HYDRATION_FIRST",
+  "HYDRATION_SECOND",
+]);
+const COMMAND_KINDS = new Set<CommandKind>([
+  "PREPARED_PLAN",
+  "PRESS_HIGHER",
+  "LOWER_LINE",
+  "ATTACK_WIDE",
+  "COMPACT_POSSESSION",
+  "LONG_BALL",
+  "SHORT_PASSING",
+  "WINGER_TRACK",
+  "CENTRAL_RUN",
+  "CONSERVE_ENERGY",
+  "CAPTAIN_RALLY",
+  "HALFTIME_RECOVERY",
+]);
+
+const parseHydrationProgress = (
+  value: unknown,
+  match?: MatchState,
+): HydrationProgress | undefined => {
+  if (!value || typeof value !== "object") return undefined;
+  const progress = value as Partial<HydrationProgress>;
+  if (
+    !progress.phase ||
+    !HYDRATION_PHASES.has(progress.phase) ||
+    progress.phase !== match?.phase ||
+    typeof progress.countdownStartsAtMs !== "number" ||
+    !Number.isFinite(progress.countdownStartsAtMs) ||
+    typeof progress.spentCommandSeconds !== "number" ||
+    !Number.isFinite(progress.spentCommandSeconds) ||
+    progress.spentCommandSeconds < 0 ||
+    !Array.isArray(progress.deliveredKinds)
+  ) {
+    return undefined;
+  }
+
+  return {
+    phase: progress.phase,
+    countdownStartsAtMs: progress.countdownStartsAtMs,
+    spentCommandSeconds: progress.spentCommandSeconds,
+    deliveredKinds: progress.deliveredKinds.filter(
+      (kind): kind is CommandKind =>
+        typeof kind === "string" && COMMAND_KINDS.has(kind as CommandKind),
+    ),
+  };
+};
+
+export const latestGoalEventId = (match?: MatchState): string | undefined =>
+  match?.events.find((event) => event.type === "GOAL")?.id;
 
 export const parseSavedSession = (raw: string | null): SavedSession | undefined => {
   if (!raw) return undefined;
@@ -66,6 +136,10 @@ export const parseSavedSession = (raw: string | null): SavedSession | undefined 
           ? parsed.playbackSpeed
           : 1,
       acknowledgedBreakPhase: parsed.acknowledgedBreakPhase,
+      hydrationProgress: parseHydrationProgress(
+        parsed.hydrationProgress,
+        parsed.match,
+      ),
     };
   } catch {
     return undefined;
