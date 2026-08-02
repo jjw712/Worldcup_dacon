@@ -86,6 +86,8 @@ export function SubTacticSwitcher({
   disabled = false,
   availableBudget,
   pendingSlot,
+  selectionMode = false,
+  selectedSlot,
 }: {
   match: MatchState;
   onSwitch: (slot: "sub1" | "sub2") => void;
@@ -93,6 +95,8 @@ export function SubTacticSwitcher({
   disabled?: boolean;
   availableBudget?: number;
   pendingSlot?: "sub1" | "sub2";
+  selectionMode?: boolean;
+  selectedSlot?: "sub1" | "sub2";
 }) {
   const tacticLoadout = match.tacticLoadout ?? DEFAULT_TACTIC_LOADOUT;
   const entries = [
@@ -110,9 +114,15 @@ export function SubTacticSwitcher({
         const preset = TACTIC_PRESETS.find(
           (item) => item.id === tacticLoadout[slot],
         )!;
-        const active = pendingSlot
-          ? pendingSlot === slot
-          : match.homeTactic.presetId === preset.id;
+        const current = match.homeTactic.presetId === preset.id;
+        const previewSelected = selectionMode && selectedSlot === slot;
+        const active = selectionMode
+          ? selectedSlot
+            ? previewSelected
+            : current
+          : pendingSlot
+            ? pendingSlot === slot
+            : current;
         const cancelable = pendingSlot === slot;
         const requiredCost =
           costType === "ap" ? (slot === "sub1" ? 2 : 4) : cost;
@@ -129,8 +139,8 @@ export function SubTacticSwitcher({
             className={active ? "is-active" : ""}
             disabled={
               disabled ||
-              (active && !cancelable) ||
-              (!cancelable &&
+              (selectionMode ? current : active && !cancelable) ||
+              (!(selectionMode ? previewSelected : cancelable) &&
                 availableBudget !== undefined &&
                 availableBudget < requiredCost)
             }
@@ -141,9 +151,11 @@ export function SubTacticSwitcher({
             <strong>{preset.name}</strong>
             <p>{preset.summary}</p>
             <em>
-              {cancelable
+              {previewSelected
+                ? "선택됨 · 적용 필요"
+                : cancelable
                 ? `적용 취소 · ${requiredCost} AP 환급`
-                : active
+                : current
                   ? "현재 전술"
                   : displayCost}
             </em>

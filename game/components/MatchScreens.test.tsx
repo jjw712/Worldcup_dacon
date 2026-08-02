@@ -12,7 +12,9 @@ import {
   HalfTimeScreen,
   HydrationScreen,
   ObservationScreen,
+  confirmHydrationSubTacticSelection,
   defaultPositionFilterForCommand,
+  toggleHydrationSubTacticSelection,
   toggleHalfTimeSubTactic,
   toggleHalfTimePlayerTarget,
   updateHalfTimeConserveTargets,
@@ -89,6 +91,22 @@ describe("halftime personal targets", () => {
 });
 
 describe("HydrationScreen", () => {
+  it("previews a sub tactic until the same card is pressed again", () => {
+    const selected = toggleHydrationSubTacticSelection(undefined, "sub1");
+    expect(selected).toBe("sub1");
+    expect(toggleHydrationSubTacticSelection(selected, "sub1")).toBeUndefined();
+    expect(toggleHydrationSubTacticSelection(selected, "sub2")).toBe("sub2");
+  });
+
+  it("charges hydration time only when the selected tactic is confirmed", () => {
+    expect(confirmHydrationSubTacticSelection(undefined, 180)).toBeUndefined();
+    expect(confirmHydrationSubTacticSelection("sub1", 180)).toEqual({
+      slot: "sub1",
+      cost: 18,
+    });
+    expect(confirmHydrationSubTacticSelection("sub2", 31)).toBeUndefined();
+  });
+
   it("starts all-position personal commands with the full squad visible", () => {
     expect(defaultPositionFilterForCommand("CONSERVE_ENERGY")).toBe("ALL");
     expect(defaultPositionFilterForCommand("CENTRAL_RUN")).toBe("FW");

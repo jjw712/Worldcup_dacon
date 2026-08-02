@@ -887,6 +887,27 @@ export function defaultPositionFilterForCommand(
     : "ALL";
 }
 
+type HydrationSubTacticSlot = "sub1" | "sub2";
+
+export function toggleHydrationSubTacticSelection(
+  selectedSlot: HydrationSubTacticSlot | undefined,
+  requestedSlot: HydrationSubTacticSlot,
+): HydrationSubTacticSlot | undefined {
+  return selectedSlot === requestedSlot ? undefined : requestedSlot;
+}
+
+const hydrationSubTacticCost = (slot: HydrationSubTacticSlot) =>
+  slot === "sub1" ? 18 : 32;
+
+export function confirmHydrationSubTacticSelection(
+  selectedSlot: HydrationSubTacticSlot | undefined,
+  remainingSeconds: number,
+): { slot: HydrationSubTacticSlot; cost: number } | undefined {
+  if (!selectedSlot) return undefined;
+  const cost = hydrationSubTacticCost(selectedSlot);
+  return remainingSeconds >= cost ? { slot: selectedSlot, cost } : undefined;
+}
+
 export function HydrationScreen({
   match,
   memo,
@@ -921,6 +942,8 @@ export function HydrationScreen({
   >(
     "commands",
   );
+  const [selectedBreakSubTactic, setSelectedBreakSubTactic] =
+    useState<HydrationSubTacticSlot>();
   const [rosterSide, setRosterSide] = useState<"home" | "away">("home");
   const [rosterPlayerId, setRosterPlayerId] = useState<string>();
   const [compareBasePlayerId, setCompareBasePlayerId] = useState<string>();
@@ -1117,17 +1140,40 @@ export function HydrationScreen({
     );
   };
 
-  const switchBreakTactic = (slot: "sub1" | "sub2") => {
-    const cost = slot === "sub1" ? 18 : 32;
-    if (pendingDelivery || remaining < cost) {
-      setMessage(`전술 전환에 필요한 ${cost}초가 부족합니다.`);
+  const selectBreakTactic = (slot: HydrationSubTacticSlot) => {
+    const next = toggleHydrationSubTacticSelection(
+      selectedBreakSubTactic,
+      slot,
+    );
+    setSelectedBreakSubTactic(next);
+    setMessage(
+      next
+        ? `${slot === "sub1" ? "서브 전술 1" : "서브 전술 2"} 선택 · 적용을 눌러야 전환됩니다.`
+        : "서브 전술 선택을 취소했습니다.",
+    );
+  };
+
+  const applyBreakTactic = () => {
+    if (!selectedBreakSubTactic) {
+      setMessage("적용할 서브 전술을 먼저 선택하십시오.");
       return;
     }
-    setSpentCommandSeconds((current) => current + cost);
-    onSwitchSubTactic(slot);
-    setMessage(
-      `${slot === "sub1" ? "서브 전술 1" : "서브 전술 2"} 전환 완료 · ${cost}초 소요`,
+    const confirmed = confirmHydrationSubTacticSelection(
+      selectedBreakSubTactic,
+      remaining,
     );
+    if (pendingDelivery || !confirmed) {
+      setMessage(
+        `전술 전환에 필요한 ${hydrationSubTacticCost(selectedBreakSubTactic)}초가 부족합니다.`,
+      );
+      return;
+    }
+    setSpentCommandSeconds((current) => current + confirmed.cost);
+    onSwitchSubTactic(confirmed.slot);
+    setMessage(
+      `${confirmed.slot === "sub1" ? "서브 전술 1" : "서브 전술 2"} 전환 완료 · ${confirmed.cost}초 소요`,
+    );
+    setSelectedBreakSubTactic(undefined);
   };
 
   return (
@@ -1512,13 +1558,46 @@ export function HydrationScreen({
               />
             </div>
           ) : (
-            <SubTacticSwitcher
-              match={match}
-              costType="seconds"
-              disabled={Boolean(pendingDelivery)}
-              availableBudget={remaining}
-              onSwitch={switchBreakTactic}
-            />
+            <>
+              <SubTacticSwitcher
+                match={match}
+                costType="seconds"
+                disabled={Boolean(pendingDelivery)}
+                availableBudget={remaining}
+                selectionMode
+                selectedSlot={selectedBreakSubTactic}
+                onSwitch={selectBreakTactic}
+              />
+              {selectedBreakSubTactic && (
+                <div className="command-confirm">
+                  <span>선택한 서브 전술</span>
+                  <strong>
+                    {selectedBreakSubTactic === "sub1"
+                      ? "서브 전술 1"
+                      : "서브 전술 2"}
+                  </strong>
+                  <p>적용을 누르면 전술이 전환되고 시간이 차감됩니다.</p>
+                  <button
+                    type="button"
+                    className="button button-primary button-wide"
+                    onClick={applyBreakTactic}
+                    disabled={
+                      Boolean(pendingDelivery) ||
+                      remaining <
+                        hydrationSubTacticCost(selectedBreakSubTactic)
+                    }
+                  >
+                    적용
+                    <span>
+                      {hydrationSubTacticCost(selectedBreakSubTactic)}초 소요
+                    </span>
+                  </button>
+                  <p className="command-message" role="status">
+                    {message}
+                  </p>
+                </div>
+              )}
+            </>
           )}
         </aside>
       </section>

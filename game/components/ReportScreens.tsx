@@ -64,9 +64,9 @@ export function ReportScreen({
         <div>
           <p className="eyebrow">FULL TIME · DECISION REPORT</p>
           <h1>
-            말한 것과 말하지 못한 것이
+            당신의 선택이
             <br />
-            경기의 흐름을 만들었습니다.
+            경기의 흐름을 바꿨습니다.
           </h1>
         </div>
         <div className="final-score">
