@@ -3,6 +3,7 @@
 import { TEAMS } from "../data";
 import { campaignVerdict, sortedStandings } from "../engine/campaign";
 import type { CampaignState, MatchResult } from "../types";
+import { CampaignRestartButton } from "./CampaignRestartButton";
 import { MatchStatsTable } from "./MatchStatsTable";
 
 interface ReportScreenProps {
@@ -10,6 +11,7 @@ interface ReportScreenProps {
   result: MatchResult;
   onContinue: () => void;
   onTitle: () => void;
+  onRestartCampaign: () => void;
 }
 
 export type DecisionGrade = "A" | "B+" | "B" | "C";
@@ -65,6 +67,7 @@ export function ReportScreen({
   result,
   onContinue,
   onTitle,
+  onRestartCampaign,
 }: ReportScreenProps) {
   const opponent = TEAMS[result.opponentId];
   const passRate = result.metrics.homePassAttempts
@@ -265,10 +268,13 @@ export function ReportScreen({
             ? "세 경기가 모두 끝났습니다. 이제 캠페인 전체 평가를 확인하십시오."
             : `다음 상대는 ${TEAMS[["CZE", "MEX", "RSA"][campaign.currentRound] as "CZE" | "MEX" | "RSA"].name}입니다.`}
         </p>
-        <button className="button button-primary" onClick={onContinue}>
-          {campaign.completed ? "캠페인 최종 평가" : "다음 경기 준비"}
-          <span aria-hidden="true">→</span>
-        </button>
+        <div className="report-footer-actions">
+          <CampaignRestartButton onRestart={onRestartCampaign} />
+          <button className="button button-primary" onClick={onContinue}>
+            {campaign.completed ? "캠페인 최종 평가" : "다음 경기 준비"}
+            <span aria-hidden="true">→</span>
+          </button>
+        </div>
       </footer>
     </main>
   );

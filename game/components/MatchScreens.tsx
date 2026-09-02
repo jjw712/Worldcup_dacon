@@ -21,6 +21,7 @@ import type {
   MatchState,
   Position,
 } from "../types";
+import { CampaignRestartButton } from "./CampaignRestartButton";
 import { MatchStatsTable, possessionPercent } from "./MatchStatsTable";
 import { PlayerComparisonDialog } from "./PlayerComparisonDialog";
 import { TacticalBoard } from "./TacticalBoard";
@@ -287,8 +288,8 @@ interface ObservationScreenProps {
     >,
   ) => void;
   onCancelSubstitution?: (pendingId: string) => void;
-  onSwitchSubTactic: (slot: "sub1" | "sub2") => void;
   onSkipToDecision: () => void;
+  onRestartCampaign: () => void;
 }
 
 export function ObservationScreen({
@@ -305,8 +306,8 @@ export function ObservationScreen({
   onSubstitute,
   onQueueSubstitution,
   onCancelSubstitution,
-  onSwitchSubTactic,
   onSkipToDecision,
+  onRestartCampaign,
 }: ObservationScreenProps) {
   const [homePossession] = possessionPercent(match.metrics);
   const [staffTab, setStaffTab] = useState<"feedback" | "commands">(
@@ -314,9 +315,6 @@ export function ObservationScreen({
   );
   const [detailPlayerId, setDetailPlayerId] = useState<string>();
   const [compareBasePlayerId, setCompareBasePlayerId] = useState<string>();
-  const [pauseTool, setPauseTool] = useState<"substitution" | "tactic">(
-    "substitution",
-  );
   const [pauseSubMode, setPauseSubMode] = useState<"immediate" | "queue">(
     "immediate",
   );
@@ -547,8 +545,8 @@ export function ObservationScreen({
           {isPaused && (
             <div className="match-paused-overlay" role="status">
               <span>경기 중지</span>
-              <strong>전술과 교체를 정비하십시오.</strong>
-              <small>오른쪽 패널에서 변경한 뒤 경기를 재개하십시오.</small>
+              <strong>선수 교체를 정비하십시오.</strong>
+              <small>즉시 교체하거나 다음 중단 시점에 예약할 수 있습니다.</small>
             </div>
           )}
           <div className="board-legend">
@@ -583,69 +581,44 @@ export function ObservationScreen({
                   <h2>경기 중 선수 교체</h2>
                 </div>
               </div>
-              <div className="pause-tools-tabs">
+              <div className="substitution-timing-toggle">
                 <button
                   type="button"
-                  className={pauseTool === "substitution" ? "is-active" : ""}
-                  onClick={() => setPauseTool("substitution")}
+                  className={pauseSubMode === "immediate" ? "is-active" : ""}
+                  onClick={() => setPauseSubMode("immediate")}
                 >
-                  선수 교체
+                  즉시 교체
                 </button>
                 <button
                   type="button"
-                  className={pauseTool === "tactic" ? "is-active" : ""}
-                  onClick={() => setPauseTool("tactic")}
+                  className={pauseSubMode === "queue" ? "is-active" : ""}
+                  disabled={!nextBreak}
+                  onClick={() => setPauseSubMode("queue")}
                 >
-                  서브 전술
+                  {nextBreak ? `${nextBreak.label} 예약` : "예약 구간 없음"}
                 </button>
               </div>
-              {pauseTool === "substitution" ? (
-                <>
-                  <div className="substitution-timing-toggle">
-                    <button
-                      type="button"
-                      className={pauseSubMode === "immediate" ? "is-active" : ""}
-                      onClick={() => setPauseSubMode("immediate")}
-                    >
-                      즉시 교체
-                    </button>
-                    <button
-                      type="button"
-                      className={pauseSubMode === "queue" ? "is-active" : ""}
-                      disabled={!nextBreak}
-                      onClick={() => setPauseSubMode("queue")}
-                    >
-                      {nextBreak ? `${nextBreak.label} 예약` : "예약 구간 없음"}
-                    </button>
-                  </div>
-                  <TeamRosterPanel
-                    match={match}
-                    side="home"
-                    selectedPlayerId={selectedPlayerId}
-                    onSelectPlayer={onSelectPlayer}
-                    allowSubstitution
-                    substitutionMode={pauseSubMode}
-                    onSubstitute={(outgoingPlayerId, incomingPlayerId) => {
-                      if (pauseSubMode === "queue" && nextBreak) {
-                        onQueueSubstitution?.(
-                          outgoingPlayerId,
-                          incomingPlayerId,
-                          nextBreak.phase,
-                        );
-                      } else {
-                        onSubstitute(outgoingPlayerId, incomingPlayerId);
-                      }
-                    }}
-                    onCancelSubstitution={onCancelSubstitution}
-                    onComparePlayer={setCompareBasePlayerId}
-                  />
-                </>
-              ) : (
-                <SubTacticSwitcher
-                  match={match}
-                  onSwitch={onSwitchSubTactic}
-                />
-              )}
+              <TeamRosterPanel
+                match={match}
+                side="home"
+                selectedPlayerId={selectedPlayerId}
+                onSelectPlayer={onSelectPlayer}
+                allowSubstitution
+                substitutionMode={pauseSubMode}
+                onSubstitute={(outgoingPlayerId, incomingPlayerId) => {
+                  if (pauseSubMode === "queue" && nextBreak) {
+                    onQueueSubstitution?.(
+                      outgoingPlayerId,
+                      incomingPlayerId,
+                      nextBreak.phase,
+                    );
+                  } else {
+                    onSubstitute(outgoingPlayerId, incomingPlayerId);
+                  }
+                }}
+                onCancelSubstitution={onCancelSubstitution}
+                onComparePlayer={setCompareBasePlayerId}
+              />
               <button
                 type="button"
                 className="button button-primary button-wide"
@@ -653,6 +626,10 @@ export function ObservationScreen({
               >
                 경기 재개
               </button>
+              <CampaignRestartButton
+                onRestart={onRestartCampaign}
+                className="button button-ghost button-wide campaign-restart-button"
+              />
             </div>
           )}
           <div className="match-panel player-monitor">

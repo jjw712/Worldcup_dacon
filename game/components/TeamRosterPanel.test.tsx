@@ -9,7 +9,11 @@ import {
   startMatch,
 } from "../engine/matchEngine";
 import type { MatchState } from "../types";
-import { rosterComparisonRows, TeamRosterPanel } from "./TeamRosterPanel";
+import {
+  resolveRosterExchange,
+  rosterComparisonRows,
+  TeamRosterPanel,
+} from "./TeamRosterPanel";
 
 const renderHomeRoster = (
   match: MatchState,
@@ -69,5 +73,57 @@ describe("TeamRosterPanel hover comparison", () => {
     ]);
     expect(rows.every((row) => row.baseValue >= 0)).toBe(true);
     expect(rows.every((row) => row.candidateValue >= 0)).toBe(true);
+  });
+
+  it("offers the same exchange whether the selected player is a starter or substitute", () => {
+    const match = createMatch(
+      MATCH_DEFINITIONS[0],
+      createNewCampaign(246_812),
+    );
+    const starter = match.players.find(
+      (player) => player.side === "home" && player.position !== "GK",
+    )!;
+    const startingIds = new Set(
+      match.players
+        .filter((player) => player.side === "home" && player.onField)
+        .map((player) => player.id),
+    );
+    const substitute = match.homeTeam.roster.find(
+      (player) =>
+        !startingIds.has(player.id) && player.position !== "GK",
+    )!;
+
+    expect(resolveRosterExchange(starter, substitute, startingIds)).toEqual({
+      outgoing: starter,
+      incoming: substitute,
+    });
+    expect(resolveRosterExchange(substitute, starter, startingIds)).toEqual({
+      outgoing: starter,
+      incoming: substitute,
+    });
+  });
+
+  it("keeps comparison but does not offer an exchange for goalkeeper-outfield pairs", () => {
+    const match = createMatch(
+      MATCH_DEFINITIONS[0],
+      createNewCampaign(246_813),
+    );
+    const startingIds = new Set(
+      match.players
+        .filter((player) => player.side === "home" && player.onField)
+        .map((player) => player.id),
+    );
+    const goalkeeper = match.homeTeam.roster.find(
+      (player) => player.position === "GK" && startingIds.has(player.id),
+    )!;
+    const substitute = match.homeTeam.roster.find(
+      (player) =>
+        player.position !== "GK" && !startingIds.has(player.id),
+    )!;
+
+    expect(rosterComparisonRows(goalkeeper, substitute)).toHaveLength(6);
+    expect(
+      resolveRosterExchange(goalkeeper, substitute, startingIds),
+    ).toBeUndefined();
   });
 });

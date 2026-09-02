@@ -245,18 +245,26 @@ export function GameApp() {
 
   const beginNewCampaign = () => {
     const fresh = createNewCampaign(Date.now() >>> 0);
+    if (goalPauseTimer.current) {
+      window.clearTimeout(goalPauseTimer.current);
+      goalPauseTimer.current = undefined;
+    }
+    goalPauseActive.current = false;
     setCampaign(fresh);
     setCampaignStarted(true);
     setMatch(undefined);
     setLastResult(undefined);
     setMemo("");
+    setPlaybackSpeed(1);
     setIsPaused(false);
     setGoalEvent(undefined);
     setAcknowledgedBreakPhase(undefined);
     setHydrationProgress(undefined);
+    setSelectedPlayerId(undefined);
     handledFinishedMatch.current = undefined;
     handledGoalEvent.current = undefined;
     try {
+      window.localStorage.removeItem(SESSION_STORAGE_KEY);
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(fresh));
     } catch {
       // The campaign still starts even when browser storage is unavailable.
@@ -557,16 +565,12 @@ export function GameApp() {
             current ? cancelPendingSubstitution(current, pendingId) : current,
           )
         }
-        onSwitchSubTactic={(slot) =>
-          setMatch((current) =>
-            current ? switchToSubTactic(current, slot) : current,
-          )
-        }
         onSkipToDecision={() =>
           setMatch((current) =>
             current ? skipObservationSegment(current) : current,
           )
         }
+        onRestartCampaign={beginNewCampaign}
       />
     );
   }
@@ -582,6 +586,7 @@ export function GameApp() {
         result={lastResult}
         onContinue={goAfterReport}
         onTitle={() => setScreen("landing")}
+        onRestartCampaign={beginNewCampaign}
       />
     );
   }

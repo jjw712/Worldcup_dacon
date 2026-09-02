@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type DragEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { canExchangePlayers } from "../playerRules";
 import type { MatchState, RosterPlayer, Side } from "../types";
 
@@ -87,6 +87,25 @@ export const rosterComparisonRows = (
     row("수비", base.coreAbilities.defending, candidate.coreAbilities.defending),
     row("피지컬", base.coreAbilities.physical, candidate.coreAbilities.physical),
   ];
+};
+
+export const resolveRosterExchange = (
+  base: RosterPlayer,
+  candidate: RosterPlayer,
+  startingPlayerIds: ReadonlySet<string>,
+) => {
+  const baseIsStarting = startingPlayerIds.has(base.id);
+  const candidateIsStarting = startingPlayerIds.has(candidate.id);
+  if (
+    baseIsStarting === candidateIsStarting ||
+    !canExchangePlayers(base, candidate)
+  ) {
+    return undefined;
+  }
+  return {
+    outgoing: baseIsStarting ? base : candidate,
+    incoming: baseIsStarting ? candidate : base,
+  };
 };
 
 const reservationLabel = (
@@ -176,6 +195,9 @@ export function TeamRosterPanel({
     left: number;
     top: number;
   }>();
+  const comparisonHideTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined,
+  );
   const team = side === "home" ? match.homeTeam : match.awayTeam;
   const startingPlayers = useMemo(
     () =>
@@ -231,7 +253,7 @@ export function TeamRosterPanel({
   const outgoing = startingPlayers.find(
     (player) => player.id === effectiveOutgoingPlayerId,
   );
-  const comparisonBase = outgoing ?? selected;
+  const comparisonBase = selected;
   const comparisonCandidate = [...startingPlayers, ...benchPlayers].find(
     (player) => player.id === hoveredComparison?.playerId,
   );
@@ -241,14 +263,45 @@ export function TeamRosterPanel({
     comparisonBase.id !== comparisonCandidate.id
       ? rosterComparisonRows(comparisonBase, comparisonCandidate)
       : undefined;
-  const comparisonCanExchange = Boolean(
-    comparisonBase &&
-      comparisonCandidate &&
-      canExchangePlayers(comparisonBase, comparisonCandidate),
-  );
   const selectedIsBench = selected && !startingIds.has(selected.id);
   const substitutionLimitReached =
     (match.substitutionsUsed ?? 0) + pendingSubstitutions.length >= 5;
+  const comparisonExchange =
+    allowSubstitution && comparisonBase && comparisonCandidate
+      ? resolveRosterExchange(
+          comparisonBase,
+          comparisonCandidate,
+          startingIds,
+        )
+      : undefined;
+  const comparisonExchangeUnavailable = Boolean(
+    comparisonExchange &&
+      (substitutionLimitReached ||
+        pendingOutgoingIds.has(comparisonExchange.outgoing.id)),
+  );
+
+  const cancelComparisonHide = () => {
+    if (comparisonHideTimer.current) {
+      clearTimeout(comparisonHideTimer.current);
+      comparisonHideTimer.current = undefined;
+    }
+  };
+
+  const hideComparisonSoon = () => {
+    cancelComparisonHide();
+    comparisonHideTimer.current = setTimeout(() => {
+      setHoveredComparison(undefined);
+      comparisonHideTimer.current = undefined;
+    }, 140);
+  };
+
+  useEffect(
+    () => () => {
+      if (comparisonHideTimer.current) {
+        clearTimeout(comparisonHideTimer.current);
+      }
+    },
+  );
 
   const selectPlayer = (
     player: RosterPlayer,
@@ -296,6 +349,7 @@ export function TeamRosterPanel({
     onSelectPlayer(incomingPlayer.id);
     setOutgoingPlayerId(undefined);
     setDraggedPlayerId(undefined);
+    setHoveredComparison(undefined);
     setListMode("starting");
   };
 
@@ -324,9 +378,10 @@ export function TeamRosterPanel({
 
   const showComparison = (player: RosterPlayer, element: HTMLElement) => {
     if (!comparisonBase || comparisonBase.id === player.id) return;
+    cancelComparisonHide();
     const bounds = element.getBoundingClientRect();
     const cardWidth = Math.min(300, window.innerWidth - 16);
-    const cardHeight = 238;
+    const cardHeight = 280;
     const left =
       bounds.right + 12 + cardWidth <= window.innerWidth
         ? bounds.right + 12
@@ -379,11 +434,11 @@ export function TeamRosterPanel({
         onMouseEnter={(event) => showComparison(player, event.currentTarget)}
         onMouseLeave={(event) => {
           if (document.activeElement !== event.currentTarget) {
-            setHoveredComparison(undefined);
+            hideComparisonSoon();
           }
         }}
         onFocus={(event) => showComparison(player, event.currentTarget)}
-        onBlur={() => setHoveredComparison(undefined)}
+        onBlur={hideComparisonSoon}
         onDragOver={(event) => {
           if (isOppositeDropTarget) event.preventDefault();
         }}
@@ -431,11 +486,11 @@ export function TeamRosterPanel({
           }}
           role="status"
           aria-label={`${comparisonBase.name} 선수와 ${comparisonCandidate.name} 선수 능력 비교`}
+          onMouseEnter={cancelComparisonHide}
+          onMouseLeave={hideComparisonSoon}
         >
           <span>
-            {comparisonCanExchange
-              ? "교체 능력 비교"
-              : "선수 능력 비교 · 교체 불가"}
+            {comparisonExchange ? "선수 교체 · 능력 비교" : "선수 능력 비교"}
           </span>
           <header>
             <strong>{comparisonBase.name}</strong>
@@ -467,6 +522,29 @@ export function TeamRosterPanel({
               );
             })}
           </div>
+          {comparisonExchange && (
+            <button
+              type="button"
+              disabled={comparisonExchangeUnavailable}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() =>
+                completeSubstitution(
+                  comparisonExchange.outgoing,
+                  comparisonExchange.incoming,
+                )
+              }
+            >
+              {comparisonExchangeUnavailable
+                ? substitutionLimitReached
+                  ? "교체 5명을 모두 사용했습니다"
+                  : "이미 교체 예약된 선수입니다"
+                : substitutionMode === "queue"
+                  ? `${comparisonExchange.outgoing.name} → ${comparisonExchange.incoming.name} 교체 예약`
+                  : substitutionMode === "lineup"
+                    ? `${comparisonExchange.outgoing.name} → ${comparisonExchange.incoming.name} 선발 변경`
+                    : `${comparisonExchange.outgoing.name} → ${comparisonExchange.incoming.name} 즉시 교체`}
+            </button>
+          )}
         </aside>
       )}
       {!allowSubstitution && <div className="roster-list-tabs">

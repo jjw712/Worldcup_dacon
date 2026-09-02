@@ -191,14 +191,18 @@ describe("HydrationScreen", () => {
         onPlaybackSpeedChange={vi.fn()}
         onPauseChange={vi.fn()}
         onSubstitute={vi.fn()}
-        onSwitchSubTactic={vi.fn()}
         onSkipToDecision={vi.fn()}
+        onRestartCampaign={vi.fn()}
       />,
     );
 
     expect(html).toContain("경기 재개");
     expect(html).toContain("경기 중 선수 교체");
+    expect(html).toContain("즉시 교체");
+    expect(html).toContain("22분 하이드레이션 예약");
+    expect(html).not.toContain("서브 전술");
     expect(html).toContain("드래그 교체");
+    expect(html).toContain("캠페인 처음부터");
     expect(html).toContain("GOAL");
   });
 

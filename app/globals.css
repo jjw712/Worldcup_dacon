@@ -2304,28 +2304,6 @@ p {
   font-weight: 900;
 }
 
-.pause-tools-tabs {
-  display: grid;
-  gap: 5px;
-  grid-template-columns: repeat(2, 1fr);
-  margin-bottom: 7px;
-}
-
-.pause-tools-tabs button {
-  background: #e4ebe5;
-  border: 1px solid var(--line);
-  color: #5c7065;
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 900;
-  min-height: 36px;
-}
-
-.pause-tools-tabs button.is-active {
-  background: var(--ink);
-  color: var(--lime);
-}
-
 .comparison-backdrop {
   align-items: center;
   background: rgba(4, 14, 11, 0.84);
@@ -2556,6 +2534,12 @@ p {
 
 .pause-substitution-panel .embedded-roster-panel {
   flex: 1;
+}
+
+.pause-substitution-panel .campaign-restart-button {
+  border-color: var(--line);
+  color: var(--ink);
+  margin-top: 8px;
 }
 
 .match-panel {
@@ -3875,6 +3859,16 @@ p {
   margin: 0;
 }
 
+.report-footer-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.report-footer .campaign-restart-button {
+  border-color: var(--line);
+  color: var(--ink);
+}
+
 .final-shell {
   background: var(--ink);
   color: var(--cream);
@@ -5023,6 +5017,11 @@ p {
     padding: 0 16px;
   }
 
+  .report-footer-actions {
+    align-items: stretch;
+    flex-direction: column-reverse;
+  }
+
   .final-stat-grid {
     gap: 14px;
     grid-template-columns: repeat(2, 1fr);
@@ -5151,7 +5150,7 @@ p {
   box-shadow: 0 16px 38px rgba(0, 0, 0, 0.32);
   color: #f3f0e8;
   padding: 11px 12px 12px;
-  pointer-events: none;
+  pointer-events: auto;
   position: fixed;
   width: min(300px, calc(100vw - 16px));
   z-index: 1200;
@@ -5222,6 +5221,25 @@ p {
 
 .roster-hover-comparison p em.is-minus {
   color: #f2aaa6;
+}
+
+.roster-hover-comparison > button {
+  background: #c9f459;
+  border: 0;
+  color: #071b15;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 900;
+  margin-top: 8px;
+  min-height: 34px;
+  padding: 7px 10px;
+  width: 100%;
+}
+
+.roster-hover-comparison > button:disabled {
+  background: #526059;
+  color: #c0cbc5;
+  cursor: not-allowed;
 }
 
 .pending-substitution-list p {
