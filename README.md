@@ -1,5 +1,7 @@
 # 잠.물.마
 
+[![CI](https://github.com/jjw712/Worldcup_dacon/actions/workflows/ci.yml/badge.svg)](https://github.com/jjw712/Worldcup_dacon/actions/workflows/ci.yml)
+
 > 잠깐 물만 마시지 말고 내 말도 들어다오
 
 대한민국 대표팀 감독이 되어 월드컵 조별리그 3경기를 운영하는 PC 웹 축구 감독
@@ -96,7 +98,7 @@ npm run dev
 ```bash
 # 품질 검사
 npm test
-npx tsc --noEmit
+npm run typecheck
 npm run lint
 npm run test:render
 
