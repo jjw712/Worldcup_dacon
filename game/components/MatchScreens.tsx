@@ -351,7 +351,7 @@ export function ObservationScreen({
     <main className="match-shell">
       <header className="match-header">
         <div className="brand-lockup compact">
-          <span className="brand-mark">잠.물.마</span>
+          <span className="brand-mark">다음 휘슬까지</span>
           <span className="live-indicator">
             <span /> LIVE
           </span>
@@ -797,7 +797,7 @@ export function FullTimeScreen({
   return (
     <main className="fulltime-shell">
       <header>
-        <span className="brand-mark">잠.물.마</span>
+        <span className="brand-mark">다음 휘슬까지</span>
         <b>FULL TIME</b>
       </header>
       <section className="fulltime-content">
@@ -1157,7 +1157,7 @@ export function HydrationScreen({
     <main className="break-shell">
       <header className="break-header">
         <div>
-          <span className="brand-mark">잠.물.마</span>
+          <span className="brand-mark">다음 휘슬까지</span>
           <strong>
             {match.phase === "HYDRATION_FIRST" ? "전반" : "후반"} 하이드레이션
             브레이크
@@ -2044,7 +2044,7 @@ export function HalfTimeScreen({
   return (
     <main className="halftime-shell">
       <header className="halftime-header">
-        <span className="brand-mark">잠.물.마</span>
+        <span className="brand-mark">다음 휘슬까지</span>
         <div>
           <p className="eyebrow">HALF TIME · TEAM TALK</p>
           <h1>하프타임 전술 조정</h1>

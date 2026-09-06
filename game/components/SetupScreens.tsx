@@ -41,7 +41,7 @@ export function LandingScreen({
       <div className="landing-grid" aria-hidden="true" />
       <header className="landing-header">
         <div className="brand-lockup">
-          <span className="brand-mark">잠.물.마</span>
+          <span className="brand-mark">다음 휘슬까지</span>
           <span className="brand-kicker">WORLD CUP TACTICAL SIMULATION</span>
         </div>
         <span className="status-pill">
@@ -175,7 +175,7 @@ export function CampaignHub({
     <main className="page-shell campaign-page">
       <header className="app-header">
         <button className="brand-button" onClick={onBackToTitle}>
-          잠.물.마
+          다음 휘슬까지
         </button>
         <div className="campaign-progress">
           {MATCH_DEFINITIONS.map((definition, index) => (
@@ -340,7 +340,7 @@ export function PreMatchScreen({
     <main className="page-shell prep-page">
       <header className="app-header">
         <button className="brand-button" onClick={onBack}>
-          잠.물.마
+          다음 휘슬까지
         </button>
         <div className="phase-chip">경기 전 준비</div>
         <div className="header-matchup">

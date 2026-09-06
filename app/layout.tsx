@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import "./globals.css";
 
-const title = "잠.물.마 | 월드컵 감독 시뮬레이션";
+const title = "다음 휘슬까지 | 월드컵 감독 시뮬레이션";
 const description =
   "화면상 180초, 실제 최대 60초 안에 가장 중요한 전술부터 전달하는 월드컵 감독 시뮬레이션.";
 
@@ -25,7 +25,7 @@ export async function generateMetadata(): Promise<Metadata> {
       description,
       type: "website",
       locale: "ko_KR",
-      images: [{ url: imageUrl, width: 1731, height: 909, alt: "잠.물.마" }],
+      images: [{ url: imageUrl, width: 1731, height: 909, alt: "다음 휘슬까지" }],
     },
     twitter: {
       card: "summary_large_image",

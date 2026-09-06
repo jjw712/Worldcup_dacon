@@ -31,7 +31,7 @@ test("server-renders the game landing page", async () => {
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
 
   const html = await response.text();
-  assert.match(html, /<title>잠\.물\.마 \| 월드컵 감독 시뮬레이션<\/title>/i);
+  assert.match(html, /<title>다음 휘슬까지 \| 월드컵 감독 시뮬레이션<\/title>/i);
   assert.match(html, /다 말할 시간은 없다/);
   assert.match(html, /새 캠페인 시작/);
   assert.match(html, /실제 1초마다 3초 감소/);
@@ -46,7 +46,7 @@ test("removes starter preview code and metadata", async () => {
   ]);
 
   assert.match(page, /<GameApp \/>/);
-  assert.match(layout, /잠\.물\.마 \| 월드컵 감독 시뮬레이션/);
+  assert.match(layout, /다음 휘슬까지 \| 월드컵 감독 시뮬레이션/);
   assert.match(layout, /og\.png/);
   assert.doesNotMatch(packageJson, /react-loading-skeleton/);
   await assert.rejects(

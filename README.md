@@ -1,8 +1,8 @@
-# 잠.물.마
+# 다음 휘슬까지
 
 [![CI](https://github.com/jjw712/Worldcup_dacon/actions/workflows/ci.yml/badge.svg)](https://github.com/jjw712/Worldcup_dacon/actions/workflows/ci.yml)
 
-> 잠깐 물만 마시지 말고 내 말도 들어다오
+> 다음 휘슬이 울리기 전, 경기를 바꿀 한 수.
 
 대한민국 대표팀 감독이 되어 월드컵 조별리그 3경기를 운영하는 PC 웹 축구 감독
 시뮬레이션입니다. 제한된 시간과 AP 안에서 전술, 교체와 선수 지시를 결정하며,

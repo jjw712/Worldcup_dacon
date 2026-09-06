@@ -92,7 +92,7 @@ export function ReportScreen({
     <main className="report-shell">
       <header className="app-header report-header">
         <button className="brand-button" onClick={onTitle}>
-          잠.물.마
+          다음 휘슬까지
         </button>
         <div className="phase-chip">경기 후 리포트</div>
         <span>GROUP {result.round} 종료</span>
@@ -304,7 +304,7 @@ export function FinalCampaignScreen({
       <div className="final-background" aria-hidden="true" />
       <header className="final-header">
         <button className="brand-button light" onClick={onTitle}>
-          잠.물.마
+          다음 휘슬까지
         </button>
         <span>CAMPAIGN COMPLETE</span>
       </header>

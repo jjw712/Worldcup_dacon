@@ -128,6 +128,7 @@ p {
 }
 
 .brand-mark {
+  white-space: nowrap;
   font-size: 26px;
   font-weight: 950;
   letter-spacing: -0.08em;
@@ -153,6 +154,7 @@ p {
 }
 
 .brand-button {
+  white-space: nowrap;
   background: transparent;
   border: 0;
   cursor: pointer;
